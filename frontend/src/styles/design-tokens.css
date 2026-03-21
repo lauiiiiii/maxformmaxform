@@ -1,0 +1,158 @@
+:root {
+  --color-brand-primary:#4f8bff;
+  --color-brand-accent:#6f62ff;
+  --color-brand-mint:#2dd9c5;
+  --color-bg-base:#ffffff;
+  --color-bg-alt:#f6f9fc;
+  --color-text-main:#1f2d3d;
+  --color-text-muted:#5b6775;
+  --color-border:#e2e8f4;
+  --radius-sm:6px;
+  --radius-md:12px;
+  --radius-lg:18px;
+  --shadow-sm:0 2px 6px rgba(0,0,0,0.04);
+  --shadow-card:0 12px 40px -10px rgba(54,83,148,.25);
+  --gradient-brand:linear-gradient(120deg,#4f8bff,#6f62ff 40%,#2dd9c5);
+  --transition-base:.3s cubic-bezier(.4,0,.2,1);
+}
+
+/* 暗色模式 */
+:root.dark {
+  --color-bg-base:#0f141c;
+  --color-bg-alt:#18212b;
+  --color-text-main:#d9e2f0;
+  --color-text-muted:#8795a7;
+  --color-border:#2a3643;
+  --shadow-card:0 12px 40px -10px rgba(0,0,0,.55);
+}
+
+/* —— 问卷编辑：题型面板 美化 —— */
+.question-types-panel.in-editor {
+  position: sticky;
+  top: 16px;
+  align-self: start;
+  width: 245px; /* 调整为 245px */
+  background: transparent; /* 扁平化：移除外层底色 */
+  border: 0;               /* 扁平化：移除边框 */
+  border-radius: 0;
+  box-shadow: none;        /* 扁平化：移除阴影 */
+  padding: 4px 0 4px 0;    /* 左右去内边距，贴左缘 */
+}
+
+.question-types-panel .panel-header h4 {
+  font-size: 14px;
+  letter-spacing: .5px;
+  color: var(--color-text-muted);
+  margin-bottom: 8px;
+}
+
+.question-types-panel .question-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.question-types-panel .category-compact {
+  border: 0;                      /* 扁平化：无卡片边框 */
+  border-radius: 0;
+  background: transparent;        /* 扁平化：无卡片底色 */
+  overflow: visible;
+  padding: 0 0 8px;               /* 分组间更轻的间距 */
+}
+
+.question-types-panel .category-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;                /* 更轻量的行高 */
+  font-weight: 600;
+  color: var(--color-text-main);
+  cursor: pointer;
+  user-select: none;
+  background: transparent;          /* 去除渐变底色 */
+}
+.question-types-panel .category-title:hover { background: transparent; }
+.question-types-panel .category-arrow {
+  display: inline-block;
+  transition: transform var(--transition-base);
+}
+.question-types-panel .category-arrow.collapsed { transform: rotate(-90deg); }
+
+.question-types-panel .type-list {
+  padding: 4px 0 8px;               /* 贴近分组标题 */
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;                         /* 再窄一点 */
+  justify-items: start;             /* 网格项左对齐，避免拉伸 */
+  margin-left: 0;                   /* 取消整体左移 */
+}
+
+/* 仅左列（奇数序号）右移约一个中文字符 */
+.question-types-panel .type-list > .type-item:nth-child(odd) {
+  margin-left: 0em;
+}
+
+.question-types-panel .type-item {
+  display: inline-flex;             /* 根据内容收缩宽度 */
+  align-items: center;
+  gap: 6px;
+  padding: 1px 6px;                 /* 再收紧上下留白 */
+  margin-left: 0;                   /* 取消负外边距，避免被裁切/重叠 */
+  border: 0;                        /* 去掉按钮边框 */
+  border-radius: 999px;             /* 默认也保持胶囊形状，避免退场时出现矩形 */
+  background: transparent;          /* 去底色 */
+  color: var(--color-text-main);    /* 文本恢复为正文色 */
+  cursor: pointer;
+  transition: none;                 /* 不要任何过渡动画 */
+  box-shadow: none;                  /* 无阴影 */
+  min-height: auto;
+  line-height: 1;                 /* 收紧行高，减少段落间距 */
+  font-weight: 500;                  /* 轻度加强 */
+  font-size: 14px;                   /* 字体略大一些 */
+  justify-self: start;               /* 单个项左对齐，不拉伸 */
+  width: max-content;                /* 胶囊宽度仅包裹内容 */
+}
+
+/* 纯文字内容的行高同步收紧，避免换行时行距过大 */
+.question-types-panel .type-item span {
+  line-height: 1.15;
+  display: inline-block;
+  width: 5em;                      /* 固定为 5 个中文字符的宽度 */
+  white-space: normal;             /* 允许换行 */
+  word-break: break-all;           /* 按字符换行，适配中英文混排 */
+  overflow-wrap: anywhere;         /* 长单词也可断行 */
+}
+.question-types-panel .type-item:hover {
+  background: var(--el-color-primary, #409eff);  /* 悬浮：胶囊蓝底 */
+  color: #fff;                                   /* 文字变白 */
+  border-radius: 999px;                          /* 胶囊形状 */
+}
+.question-types-panel .type-item:active {
+  background: #1e78ff;                           /* 按下：更深蓝 */
+  color: #fff;
+  border-radius: 999px;
+}
+
+/* 键盘可达性：聚焦态更明显 */
+.question-types-panel .type-item:focus-visible {
+  outline: none;
+  border-color: var(--el-color-primary, #409eff);
+  box-shadow: 0 0 0 3px rgba(64,158,255,0.2);
+}
+
+/* 图标主色强调，增强识别度 */
+.question-types-panel .type-item .type-icon {
+  color: var(--el-color-primary, #409eff); /* 图标保持蓝色强调 */
+  opacity: 1;
+  font-size: 18px;                    /* 图标略大以匹配文本 */
+}
+
+/* 悬浮时图标更亮一点 */
+.question-types-panel .type-item:hover .type-icon {
+  color: #fff;                                   /* 悬浮时图标变白 */
+  filter: none;
+}
+
+/* 提示/徽标类的小图标对齐 */
+.question-types-panel .type-item::before { content: ''; }
+

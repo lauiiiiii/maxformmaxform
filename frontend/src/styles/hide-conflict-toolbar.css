@@ -1,0 +1,12 @@
+/* 隐藏意外出现的第三方浮动富文本菜单（非本项目的工具栏） */
+/* 根据观察：该面板包含两行“Normal”文本 + 一组格式按钮，浮动在描述输入框左下或内部 */
+/* 先用通用选择器：宽度 180~400，包含 Normal Normal，位置 absolute/fixed，圆角白底 */
+
+/* 常见第三方类名预防 */
+.ql-bubble, .ql-tooltip, .w-e-bar, .w-e-panel { display:none !important; }
+
+/* 兜底：若一个浮动层里出现两个 Normal 文本节点则隐藏（降低误伤风险）*/
+/* body :is(div,section)[style*="position:"] {  这里原计划放条件隐藏逻辑，先注释避免空规则集 */
+
+/* 可选更精确（若你在 DevTools 找到外层 class，请替换 .unknown-floating-toolbar ） */
+.unknown-floating-toolbar { display:none !important; }
