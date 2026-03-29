@@ -1,16 +1,9 @@
-import Answer from '../models/Answer.js'
+import { createResponseError } from '../http/errors.js'
+import answerRepository from '../repositories/answerRepository.js'
 import surveyAggregateRepository from '../repositories/surveyAggregateRepository.js'
 import { removeUploadedFile } from '../utils/uploadStorage.js'
 import { getManagedSurveyForAnswerRequest } from './answerQueryService.js'
-
-function createResponseError(status, body) {
-  const error = Object.assign(new Error(body?.error?.message || 'Request failed'), {
-    status,
-    body
-  })
-  if (body?.error?.code) error.code = body.error.code
-  return error
-}
+import { SURVEY_ERROR_CODES } from '../../../shared/survey.contract.js'
 
 function cleanupStoredFiles(files = []) {
   if (!Array.isArray(files) || files.length === 0) return
@@ -28,12 +21,11 @@ export async function deleteAnswersBatch({ actor, ids = [] }) {
   if (!Array.isArray(ids) || ids.length === 0) {
     throw createResponseError(400, {
       success: false,
-      error: { code: 'VALIDATION', message: 'ids is required' }
+      error: { code: SURVEY_ERROR_CODES.VALIDATION, message: 'ids is required' }
     })
   }
 
-  const answers = await Promise.all(ids.map(id => Answer.findById(id)))
-  const existingAnswers = answers.filter(Boolean)
+  const existingAnswers = await answerRepository.findByIds(ids)
   if (existingAnswers.length === 0) {
     return { deleted: 0 }
   }

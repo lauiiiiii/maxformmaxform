@@ -10,6 +10,7 @@ import QuestionBankRepo from '../src/models/QuestionBankRepo.js'
 import QuestionBankQuestion from '../src/models/QuestionBankQuestion.js'
 import Role from '../src/models/Role.js'
 import User from '../src/models/User.js'
+import transactionManager from '../src/db/transaction.js'
 import { registerApiRouteHarness } from './helpers/apiRouteHarness.js'
 
 const { request, requestPublic } = registerApiRouteHarness()
@@ -88,21 +89,29 @@ test('GET /api/messages normalizes unread and types filters through the service 
 
   Message.list = async payload => {
     listPayload = payload
-    return [{ id: 5, title: 'Inbox item' }]
+    return {
+      total: 1,
+      list: [{ id: 5, title: 'Inbox item' }]
+    }
   }
 
   const { response, json } = await request('/messages?page=3&pageSize=10&unread=1&types=audit,system')
 
   assert.equal(response.status, 200)
   assert.equal(json.success, true)
-  assert.deepEqual(json.data, [{
-    id: 5,
-    title: 'Inbox item',
-    entityId: null,
-    read: false,
-    readAt: null,
-    createdAt: null
-  }])
+  assert.deepEqual(json.data, {
+    total: 1,
+    page: 3,
+    pageSize: 10,
+    list: [{
+      id: 5,
+      title: 'Inbox item',
+      entityId: null,
+      read: false,
+      readAt: null,
+      createdAt: null
+    }]
+  })
   assert.deepEqual(listPayload, {
     recipient_id: 1,
     page: 3,
@@ -124,6 +133,8 @@ test('POST /api/messages/:id/read returns not found when the message is missing'
 
 test('POST /api/folders creates folders through the service flow after parent validation', async () => {
   let createPayload = null
+  let auditPayload = null
+  let messagePayload = null
 
   Folder.findById = async (id, creatorId) => {
     if (Number(id) === 5 && Number(creatorId) === 1) {
@@ -135,8 +146,14 @@ test('POST /api/folders creates folders through the service flow after parent va
     createPayload = payload
     return { id: 9, ...payload, parentId: payload.parent_id ?? null, surveyCount: 0 }
   }
-  AuditLog.create = async () => ({ id: 1 })
-  Message.create = async () => ({ id: 1 })
+  AuditLog.create = async payload => {
+    auditPayload = payload
+    return { id: 1 }
+  }
+  Message.create = async payload => {
+    messagePayload = payload
+    return { id: 1 }
+  }
 
   const { response, json } = await request('/folders', {
     method: 'POST',
@@ -151,6 +168,8 @@ test('POST /api/folders creates folders through the service flow after parent va
     name: 'Child',
     parent_id: 5
   })
+  assert.equal(auditPayload.action, 'folder.create')
+  assert.equal(messagePayload.title, 'Folder created')
 })
 
 test('PUT /api/folders/:id rejects assigning a folder as its own parent', async () => {
@@ -177,6 +196,56 @@ test('POST /api/roles rejects duplicate role codes through the service flow', as
   assert.equal(response.status, 409)
   assert.equal(json.success, false)
   assert.equal(json.error.code, 'MGMT_ROLE_EXISTS')
+})
+
+test('POST /api/roles writes audit and message records inside the transaction flow', async () => {
+  let transactionCount = 0
+  let createdPayload = null
+  let auditPayload = null
+  let messagePayload = null
+  const originalRun = transactionManager.run
+
+  transactionManager.run = async callback => {
+    transactionCount += 1
+    return callback({})
+  }
+
+  Role.findByCode = async () => null
+  Role.create = async payload => {
+    createdPayload = payload
+    return { id: 6, ...payload }
+  }
+  AuditLog.create = async payload => {
+    auditPayload = payload
+    return { id: 1 }
+  }
+  Message.create = async payload => {
+    messagePayload = payload
+    return { id: 2 }
+  }
+
+  try {
+    const { response, json } = await request('/roles', {
+      method: 'POST',
+      body: { name: 'Auditor', code: 'auditor', permissions: ['audit.read'] }
+    })
+
+    assert.equal(response.status, 200)
+    assert.equal(json.success, true)
+    assert.equal(transactionCount, 1)
+    assert.deepEqual(createdPayload, {
+      name: 'Auditor',
+      code: 'auditor',
+      permissions: ['audit.read'],
+      remark: undefined
+    })
+    assert.equal(auditPayload.action, 'role.create')
+    assert.equal(auditPayload.target_type, 'role')
+    assert.equal(messagePayload.title, 'Role created')
+    assert.equal(messagePayload.recipient_id, 1)
+  } finally {
+    transactionManager.run = originalRun
+  }
 })
 
 test('GET /api/flows lists flow records through the service flow', async () => {
@@ -207,6 +276,36 @@ test('POST /api/flows rejects invalid flow status', async () => {
   assert.equal(response.status, 400)
   assert.equal(json.success, false)
   assert.equal(json.error.code, 'MGMT_FLOW_STATUS_INVALID')
+})
+
+test('POST /api/flows writes audit and message records for admin actions', async () => {
+  let auditPayload = null
+  let messagePayload = null
+
+  Flow.create = async payload => ({
+    id: 3,
+    ...payload,
+    created_at: '2026-03-29T00:00:00.000Z'
+  })
+  AuditLog.create = async payload => {
+    auditPayload = payload
+    return { id: 1 }
+  }
+  Message.create = async payload => {
+    messagePayload = payload
+    return { id: 2 }
+  }
+
+  const { response, json } = await request('/flows', {
+    method: 'POST',
+    body: { name: 'Security review', status: 'active', description: '2-step' }
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(json.success, true)
+  assert.equal(json.data.name, 'Security review')
+  assert.equal(auditPayload.action, 'flow.create')
+  assert.equal(messagePayload.title, 'Flow created')
 })
 
 test('GET /api/repos lists question bank repos through the service flow', async () => {
@@ -251,11 +350,47 @@ test('POST /api/repos/:id/questions validates repo existence before creating a q
   assert.equal(json.error.code, 'MGMT_QUESTION_BANK_REPO_NOT_FOUND')
 })
 
+test('POST /api/repos/:id/questions writes audit and message records after creating a question', async () => {
+  let auditPayload = null
+  let messagePayload = null
+
+  QuestionBankRepo.findById = async id => ({ id: Number(id), name: 'Common bank', question_count: 0 })
+  QuestionBankQuestion.create = async payload => ({
+    id: 21,
+    ...payload,
+    title: payload.title,
+    created_at: '2026-03-29T00:00:00.000Z',
+    updated_at: '2026-03-29T00:00:00.000Z'
+  })
+  AuditLog.create = async payload => {
+    auditPayload = payload
+    return { id: 1 }
+  }
+  Message.create = async payload => {
+    messagePayload = payload
+    return { id: 2 }
+  }
+
+  const { response, json } = await request('/repos/4/questions', {
+    method: 'POST',
+    body: { title: 'How often do you log in?', type: 'single', score: 5 }
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(json.success, true)
+  assert.equal(json.data.id, 21)
+  assert.equal(auditPayload.action, 'question_bank.question.create')
+  assert.equal(messagePayload.title, 'Question created')
+  assert.equal(messagePayload.entity_id, 21)
+})
+
 test('DELETE /api/repos/:id/questions/:questionId deletes a nested question through the service flow', async () => {
   let deletedArgs = null
 
   QuestionBankRepo.findById = async id => ({ id: Number(id), name: 'Repo 1', question_count: 1 })
   QuestionBankQuestion.findById = async (id, repoId) => ({ id: Number(id), repo_id: Number(repoId), title: 'Question 1' })
+  AuditLog.create = async () => ({ id: 1 })
+  Message.create = async () => ({ id: 2 })
   QuestionBankQuestion.delete = async (id, repoId) => {
     deletedArgs = { id: Number(id), repoId: Number(repoId) }
     return 1

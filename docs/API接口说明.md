@@ -453,6 +453,13 @@
 说明：
 
 - 查询当前用户可管理文件
+- 管理员可额外使用 `uploader_id` 过滤指定上传者
+
+支持查询参数：
+- `page`
+- `pageSize`
+- `uploader_id`
+- `survey_id`
 
 ### `POST /api/files/upload`
 
@@ -479,6 +486,7 @@
 说明：
 
 - 删除当前用户可管理文件
+- 允许管理员或文件所有者执行
 
 ## 7. 用户与组织模块
 
@@ -541,6 +549,47 @@
 - `PUT /api/positions/:id`：管理员
 - `DELETE /api/positions/:id`：管理员
 
+### 7.5 流程 `/api/flows`
+
+所有接口都需要登录，且实际访问要求管理员。
+- `GET /api/flows`
+- `POST /api/flows`
+- `PUT /api/flows/:id`
+- `DELETE /api/flows/:id`
+
+`POST /api/flows` / `PUT /api/flows/:id` 请求体字段：
+- `name`
+- `status`：`draft | active | disabled`
+- `description`
+
+说明：
+- 流程写操作会在同一事务内写入主数据、审计日志与操作者消息
+
+### 7.6 题库仓库 `/api/repos`
+
+所有接口都需要登录，且实际访问要求管理员。
+- `GET /api/repos`
+- `POST /api/repos`
+- `PUT /api/repos/:id`
+- `DELETE /api/repos/:id`
+- `GET /api/repos/:id/questions`
+- `POST /api/repos/:id/questions`
+- `DELETE /api/repos/:id/questions/:questionId`
+
+`POST /api/repos` / `PUT /api/repos/:id` 请求体字段：
+- `name`
+- `description`
+
+`POST /api/repos/:id/questions` 请求体字段：
+- `title`
+- `type`
+- `difficulty`
+- `score`
+
+说明：
+- 删除仓库时会先删除其下题目，再删除仓库本身
+- 仓库和题目写操作会在同一事务内写入主数据、审计日志与操作者消息
+
 ## 8. 文件夹、消息、审计
 
 ### 8.1 文件夹 `/api/folders`
@@ -594,10 +643,3 @@
 
 - `/api/surveys/:id/analytics`
 - 基于 `DB_CLIENT` 切换数据库
-- 流程管理正式接口
-- 题库仓库正式接口
-
-当前流程与题库仓库只有共享 DTO 与前端占位 API：
-
-- `frontend/src/api/flows.ts`
-- `frontend/src/api/repos.ts`

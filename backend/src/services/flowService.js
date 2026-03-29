@@ -1,6 +1,7 @@
 import { throwManagementError, throwManagementPolicyError } from '../http/managementErrors.js'
 import { getAdminPolicy } from '../policies/adminPolicy.js'
 import flowRepository from '../repositories/flowRepository.js'
+import { recordManagementAction, runManagementTransaction } from './activity.js'
 import { createFlowDto, MANAGEMENT_ERROR_CODES } from '../../../shared/management.contract.js'
 
 const FLOW_STATUSES = new Set(['draft', 'active', 'disabled'])
@@ -47,8 +48,8 @@ function normalizeFlowDescription(description) {
   return description == null ? null : (String(description).trim() || null)
 }
 
-async function getManagedFlowOrThrow(flowId) {
-  const flow = await flowRepository.findById(flowId)
+async function getManagedFlowOrThrow(flowId, options = {}) {
+  const flow = await flowRepository.findById(flowId, options)
   if (!flow) {
     throwManagementError(404, MANAGEMENT_ERROR_CODES.FLOW_NOT_FOUND, 'Flow not found')
   }
@@ -64,30 +65,86 @@ export async function listManagedFlows({ actor }) {
 export async function createManagedFlow({ actor, body = {} }) {
   ensureAdmin(actor)
 
-  const flow = await flowRepository.create({
-    name: normalizeFlowName(body.name, { required: true }),
-    status: normalizeFlowStatus(body.status, { defaultValue: 'draft' }),
-    description: normalizeFlowDescription(body.description)
-  })
+  return runManagementTransaction(async db => {
+    const flow = await flowRepository.create({
+      name: normalizeFlowName(body.name, { required: true }),
+      status: normalizeFlowStatus(body.status, { defaultValue: 'draft' }),
+      description: normalizeFlowDescription(body.description)
+    }, { db })
 
-  return createFlowDto(flow)
+    await recordManagementAction({
+      actor,
+      audit: {
+        action: 'flow.create',
+        targetType: 'flow',
+        targetId: flow.id,
+        detail: `Created flow ${flow.name}`
+      },
+      message: {
+        recipientId: actor.sub,
+        title: 'Flow created',
+        content: `Flow "${flow.name}" was created.`,
+        entityType: 'flow',
+        entityId: flow.id
+      }
+    }, { db })
+
+    return createFlowDto(flow)
+  })
 }
 
 export async function updateManagedFlow({ actor, flowId, body = {} }) {
   ensureAdmin(actor)
-  await getManagedFlowOrThrow(flowId)
+  return runManagementTransaction(async db => {
+    await getManagedFlowOrThrow(flowId, { db })
 
-  const flow = await flowRepository.update(flowId, {
-    name: normalizeFlowName(body.name),
-    status: normalizeFlowStatus(body.status),
-    description: normalizeFlowDescription(body.description)
+    const flow = await flowRepository.update(flowId, {
+      name: normalizeFlowName(body.name),
+      status: normalizeFlowStatus(body.status),
+      description: normalizeFlowDescription(body.description)
+    }, { db })
+
+    await recordManagementAction({
+      actor,
+      audit: {
+        action: 'flow.update',
+        targetType: 'flow',
+        targetId: flow.id,
+        detail: `Updated flow ${flow.name}`
+      },
+      message: {
+        recipientId: actor.sub,
+        title: 'Flow updated',
+        content: `Flow "${flow.name}" was updated.`,
+        entityType: 'flow',
+        entityId: flow.id
+      }
+    }, { db })
+
+    return createFlowDto(flow)
   })
-
-  return createFlowDto(flow)
 }
 
 export async function deleteManagedFlow({ actor, flowId }) {
   ensureAdmin(actor)
-  await getManagedFlowOrThrow(flowId)
-  await flowRepository.delete(flowId)
+  await runManagementTransaction(async db => {
+    const flow = await getManagedFlowOrThrow(flowId, { db })
+    await flowRepository.delete(flowId, { db })
+    await recordManagementAction({
+      actor,
+      audit: {
+        action: 'flow.delete',
+        targetType: 'flow',
+        targetId: flow.id,
+        detail: `Deleted flow ${flow.name}`
+      },
+      message: {
+        recipientId: actor.sub,
+        title: 'Flow deleted',
+        content: `Flow "${flow.name}" was deleted.`,
+        entityType: 'flow',
+        entityId: flow.id
+      }
+    }, { db })
+  })
 }

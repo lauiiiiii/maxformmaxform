@@ -27,7 +27,7 @@
 - 权限控制不再只依赖路由层 `requireRole`，而是逐步下沉到 service/policy。
 - 前端编辑器已拆为页面壳、领域 composable 和编辑器子模块。
 - `shared/questionTypeRegistry.js` 与 `shared/questionModel.js` 是问卷题型与统计口径的单一事实源。
-- `shared/management.contract.js` 已扩展到流程与题库仓库 DTO，但 `frontend/src/api/flows.ts`、`frontend/src/api/repos.ts` 目前仍是占位实现。
+- `shared/management.contract.js` 已覆盖流程、题库仓库、后台文件等管理 DTO，`frontend/src/api/flows.ts`、`frontend/src/api/repos.ts`、`frontend/src/api/files.ts` 已接入真实后端路由。
 
 ## 仓库结构
 
@@ -199,16 +199,18 @@ npm run start:prod
 
 以下结果均为 `2026-03-29` 实际执行：
 
-- `cmd /c npm test` 于 `backend/` 通过，`70 / 70`
+- `cmd /c npm test` 于 `backend/` 通过，`80 / 80`
 - `node scripts/system-smoke.mjs` 于仓库根目录通过，`64 / 64`
 - `cmd /c npm run smoke:system` 于 `frontend/` 通过，`64 / 64`
+- 两个 smoke 入口并行执行已实测通过，会各自分配独立端口与独立临时测试库
+- GitHub Actions 已新增 [`CI`](./.github/workflows/ci.yml) 工作流，并将两个 smoke 入口拆成 matrix 并行 job
 - `cmd /c npm run build` 于 `frontend/` 通过
-- `cmd /c npm run test:e2e` 于 `frontend/` 通过，`8 / 8`
+- `cmd /c npm run test:e2e` 于 `frontend/` 通过，`17 / 17`
 
 注意：
-
-- `scripts/system-smoke.mjs` 与 `npm run smoke:system` 共用固定端口 `63102` 和共享测试库。
-- 两个 smoke 入口并行执行会触发 `EADDRINUSE`，验收时应顺序单实例运行。
+- 未显式设置 `PORT` 时，`scripts/system-smoke.mjs` 会让后端监听 `0` 端口，由操作系统分配空闲端口。
+- smoke 默认基于 `DB_NAME` 为每次运行创建独立临时测试库，并在结束后自动清理。
+- `SMOKE_SHARED_DB=1` 可切回共享库模式；`SMOKE_KEEP_DB=1` 可保留临时库用于排障。
 
 ## 主要接口前缀
 
@@ -220,6 +222,8 @@ npm run start:prod
 - `/api/depts`：部门管理
 - `/api/roles`：角色管理
 - `/api/positions`：职位管理
+- `/api/flows`：流程管理
+- `/api/repos`：题库仓库与题目管理
 - `/api/folders`：文件夹与问卷归档
 - `/api/messages`：消息中心
 - `/api/audits`：审计日志
@@ -231,7 +235,8 @@ npm run start:prod
 - 结果统计来自后端服务层聚合，并带有结果快照可观测字段。
 - 上传题提交契约已收敛为最小文件引用：`id + uploadToken`。
 - 认证逻辑已从路由收敛到 `backend/src/services/authService.js`。
-- `shared/management.contract.js` 新增 `FlowDTO`、`QuestionBankRepoDTO`、`QuestionBankQuestionDTO`，但对应前端 API 目前仍未接真实后端。
+- `shared/management.contract.js` 已覆盖 `FlowDTO`、`QuestionBankRepoDTO`、`QuestionBankQuestionDTO`、文件分页 DTO，并与前端 API 保持一致。
+- `users / roles / depts / positions / folders / flows / repos` 等管理写操作已统一为“主数据写入 + 审计日志 + 操作者消息”同事务边界。
 
 ## 推荐阅读
 

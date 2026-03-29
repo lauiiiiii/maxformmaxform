@@ -1,35 +1,27 @@
-import FileModel from '../models/File.js'
+import { throwManagementError, throwManagementPolicyError } from '../http/managementErrors.js'
 import { getManageFilePolicy } from '../policies/filePolicy.js'
+import fileRepository from '../repositories/fileRepository.js'
 import { buildUploadedFileUrl, removeUploadedFile } from '../utils/uploadStorage.js'
-
-function createResponseError(status, body) {
-  const error = Object.assign(new Error(body?.error?.message || 'Request failed'), {
-    status,
-    body
-  })
-  if (body?.error?.code) error.code = body.error.code
-  return error
-}
+import { createFileDto, MANAGEMENT_ERROR_CODES } from '../../../shared/management.contract.js'
 
 function ensureUploadedFile(file) {
   if (file) return
-  throw createResponseError(400, {
-    success: false,
-    error: { code: 'NO_FILE', message: 'File is required' }
-  })
+  throwManagementError(400, MANAGEMENT_ERROR_CODES.FILE_REQUIRED, 'File is required')
 }
 
 async function createManagedFileRecord({ actor, file }) {
   ensureUploadedFile(file)
 
   const url = buildUploadedFileUrl(file)
-  return FileModel.create({
+  const saved = await fileRepository.create({
     name: file.originalname || file.filename,
     url,
     size: file.size,
     type: file.mimetype,
     uploader_id: actor.sub
   })
+
+  return createFileDto(saved)
 }
 
 export async function uploadManagedFile({ actor, file }) {
@@ -46,19 +38,13 @@ export async function uploadManagedImage({ actor, file }) {
 }
 
 export async function deleteManagedFile({ actor, fileId }) {
-  const file = await FileModel.findById(fileId)
+  const file = await fileRepository.findById(fileId)
   if (!file) {
-    throw createResponseError(404, {
-      success: false,
-      error: { code: 'NOT_FOUND', message: 'File not found' }
-    })
+    throwManagementError(404, MANAGEMENT_ERROR_CODES.FILE_NOT_FOUND, 'File not found')
   }
 
-  const policy = getManageFilePolicy(actor, file)
-  if (!policy.allowed) {
-    throw createResponseError(policy.status, policy.body)
-  }
+  throwManagementPolicyError(getManageFilePolicy(actor, file))
 
   removeUploadedFile(file)
-  await FileModel.delete(fileId)
+  await fileRepository.delete(fileId)
 }

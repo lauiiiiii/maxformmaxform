@@ -189,6 +189,35 @@ export interface MessageListQueryDTO extends PaginationQueryDTO {
   types?: string | string[] | null
 }
 
+export interface FileDTO {
+  id: number
+  name: string
+  url?: string
+  type?: string
+  size?: number
+  uploader_id?: number
+  survey_id?: number
+  question_order?: number
+  answer_id?: number
+  public_token?: string | null
+  submission_token?: string | null
+  created_at?: string
+  updated_at?: string
+  uploaderId?: number
+  surveyId?: number
+  questionOrder?: number
+  answerId?: number
+  publicToken?: string | null
+  submissionToken?: string | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface FileListQueryDTO extends PaginationQueryDTO {
+  uploader_id?: number | string | null
+  survey_id?: number | string | null
+}
+
 export interface AuditLogDTO {
   id: number
   actorId?: number | null
@@ -208,6 +237,8 @@ export interface AuditListQueryDTO extends PaginationQueryDTO {
 }
 
 export type UserPageDTO = PaginatedResultDTO<UserDTO>
+export type MessagePageDTO = PaginatedResultDTO<MessageDTO>
+export type FilePageDTO = PaginatedResultDTO<FileDTO>
 export type AuditPageDTO = PaginatedResultDTO<AuditLogDTO>
 
 export const MANAGEMENT_ERROR_PREFIX: 'MGMT'
@@ -220,6 +251,7 @@ export const MANAGEMENT_ERROR_FAMILIES: Readonly<{
   POSITION: 'MGMT_POSITION'
   FOLDER: 'MGMT_FOLDER'
   MESSAGE: 'MGMT_MESSAGE'
+  FILE: 'MGMT_FILE'
   FLOW: 'MGMT_FLOW'
   QUESTION_BANK_REPO: 'MGMT_QUESTION_BANK_REPO'
   QUESTION_BANK_QUESTION: 'MGMT_QUESTION_BANK_QUESTION'
@@ -247,6 +279,8 @@ export const MANAGEMENT_ERROR_CODES: Readonly<{
   FOLDER_SELF_PARENT: 'MGMT_FOLDER_SELF_PARENT'
   FOLDER_HAS_CHILDREN: 'MGMT_FOLDER_HAS_CHILDREN'
   MESSAGE_NOT_FOUND: 'MGMT_MESSAGE_NOT_FOUND'
+  FILE_REQUIRED: 'MGMT_FILE_REQUIRED'
+  FILE_NOT_FOUND: 'MGMT_FILE_NOT_FOUND'
   FLOW_NAME_REQUIRED: 'MGMT_FLOW_NAME_REQUIRED'
   FLOW_STATUS_REQUIRED: 'MGMT_FLOW_STATUS_REQUIRED'
   FLOW_STATUS_INVALID: 'MGMT_FLOW_STATUS_INVALID'
@@ -266,6 +300,7 @@ export const MANAGEMENT_PAGINATION_DEFAULTS: Readonly<{
   usersPageSize: 20
   auditsPageSize: 20
   messagesPageSize: 50
+  filesPageSize: 20
 }>
 
 export function normalizeUserListQuery(query?: UserListQueryDTO): {
@@ -305,6 +340,26 @@ export function normalizeMessageListQuery(query?: MessageListQueryDTO): {
   types?: string[]
 }
 export function createMessageDto(message?: Partial<MessageDTO> | null): MessageDTO | null
+export function createMessagePageResult<T extends Partial<MessageDTO>>(input?: {
+  list?: T[] | readonly T[] | null
+  total?: number | string | null
+  page?: number | string | null
+  pageSize?: number | string | null
+}): MessagePageDTO
+
+export function normalizeFileListQuery(query?: FileListQueryDTO): {
+  page: number
+  pageSize: number
+  uploader_id?: number
+  survey_id?: number
+}
+export function createFileDto(file?: Partial<FileDTO> | null): FileDTO | null
+export function createFilePageResult<T extends Partial<FileDTO>>(input?: {
+  list?: T[] | readonly T[] | null
+  total?: number | string | null
+  page?: number | string | null
+  pageSize?: number | string | null
+}): FilePageDTO
 
 export function normalizeAuditListQuery(query?: AuditListQueryDTO): {
   page: number

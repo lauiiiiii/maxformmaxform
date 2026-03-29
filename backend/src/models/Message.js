@@ -51,12 +51,16 @@ const Message = {
     if (unread !== undefined) q = q.andWhere('is_read', unread)
     if (Array.isArray(types) && types.length) q = q.whereIn('type', types)
 
+    const total = await q.clone().count('* as cnt').first().then(row => Number(row?.cnt || 0))
     const rows = await q
       .orderBy('created_at', 'desc')
       .limit(pageSize)
       .offset((page - 1) * pageSize)
 
-    return rows.map(toDto)
+    return {
+      total,
+      list: rows.map(toDto)
+    }
   },
 
   async markRead(id, recipient_id) {

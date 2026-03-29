@@ -1,6 +1,12 @@
 import knex from './knex.js'
 
 export async function migrate() {
+  const createdTables = {
+    users: false,
+    surveys: false,
+    files: false
+  }
+
   if (!await knex.schema.hasTable('roles')) {
     await knex.schema.createTable('roles', t => {
       t.increments('id').unsigned()
@@ -54,6 +60,7 @@ export async function migrate() {
       t.index('dept_id')
       t.index('position_id')
     })
+    createdTables.users = true
   }
 
   if (!await knex.schema.hasTable('surveys')) {
@@ -68,11 +75,17 @@ export async function migrate() {
       t.string('share_code', 20).nullable().unique()
       t.enum('status', ['draft', 'published', 'closed']).defaultTo('draft')
       t.integer('response_count').defaultTo(0)
+      t.integer('folder_id').unsigned().nullable()
+      t.datetime('deleted_at').nullable()
+      t.integer('deleted_by').unsigned().nullable()
       t.datetime('created_at').defaultTo(knex.fn.now())
       t.datetime('updated_at').defaultTo(knex.fn.now())
       t.index('creator_id')
+      t.index('folder_id')
       t.index('status')
+      t.index('deleted_at')
     })
+    createdTables.surveys = true
   }
 
   if (!await knex.schema.hasTable('answers')) {
@@ -127,6 +140,7 @@ export async function migrate() {
       t.index('answer_id')
       t.index('public_token')
     })
+    createdTables.files = true
   }
 
   if (!await knex.schema.hasTable('folders')) {
@@ -218,7 +232,7 @@ export async function migrate() {
     })
   }
 
-  if (await knex.schema.hasTable('surveys')) {
+  if (!createdTables.surveys && await knex.schema.hasTable('surveys')) {
     if (!await knex.schema.hasColumn('surveys', 'folder_id')) {
       await knex.schema.alterTable('surveys', t => {
         t.integer('folder_id').unsigned().nullable().index()
@@ -236,7 +250,7 @@ export async function migrate() {
     }
   }
 
-  if (await knex.schema.hasTable('users')) {
+  if (!createdTables.users && await knex.schema.hasTable('users')) {
     if (!await knex.schema.hasColumn('users', 'position_id')) {
       await knex.schema.alterTable('users', t => {
         t.integer('position_id').unsigned().nullable().index()
@@ -244,7 +258,7 @@ export async function migrate() {
     }
   }
 
-  if (await knex.schema.hasTable('files')) {
+  if (!createdTables.files && await knex.schema.hasTable('files')) {
     if (!await knex.schema.hasColumn('files', 'survey_id')) {
       await knex.schema.alterTable('files', t => {
         t.integer('survey_id').unsigned().nullable().index()

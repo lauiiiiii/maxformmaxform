@@ -223,7 +223,7 @@ route
 - `/api/auth`、`/api/users`、`/api/roles`、`/api/depts`、`/api/positions`、`/api/folders`、`/api/messages`、`/api/audits` 均已服务化。
 - `/api/surveys/:id/uploads` 支持公开上传题两阶段提交。
 - `shared/management.contract.js` 已新增流程与题库仓库 DTO。
-- 但当前后端还没有对应的流程/题库仓库正式路由，前端相关 API 仍为占位实现。
+- `/api/flows`、`/api/repos`、`/api/files` 已提供真实后端路由，前端 API 已接入。
 
 ## 测试
 
@@ -236,7 +236,7 @@ cd backend
 npm test
 ```
 
-- `70 / 70` 通过
+- `80 / 80` 通过
 
 系统冒烟：
 
@@ -248,8 +248,11 @@ cd frontend
 npm run smoke:system
 ```
 
-- 两个入口顺序执行均为 `64 / 64`
-- 两个入口共用 `63102` 与共享测试库，不能并行执行
+- 两个入口单独执行均为 `64 / 64`
+- 并行执行仓库根入口与 `frontend` npm 入口已实测通过
+- smoke 默认不再占用固定端口；未设置 `PORT` 时由系统分配空闲端口
+- smoke 默认会为每次运行创建独立临时测试库，并在结束后自动删除
+- `SMOKE_SHARED_DB=1` 可关闭测试库隔离，`SMOKE_KEEP_DB=1` 可保留临时库排障
 
 浏览器级 E2E：
 
@@ -258,8 +261,8 @@ cd ../frontend
 npm run test:e2e
 ```
 
-- `8 / 8` 通过
-- 覆盖管理后台鉴权、Forbidden 跳转、上传题浏览器回归、编辑器建卷发布、公开填写、结果页读取
+- `17 / 17` 通过
+- 覆盖管理后台鉴权、流程/题库仓库、消息中心、文件管理、答卷下载、文件夹工作流、上传题浏览器回归、编辑器建卷发布、公开填写、结果页读取
 
 ## 当前结论
 
@@ -267,4 +270,4 @@ npm run test:e2e
 - 问卷域已形成 `route + policy + service + repository + transaction` 基本分层。
 - 认证与管理域已进入 `route + service + policy/contract` 阶段。
 - 结果统计当前来自 MySQL 中的答卷数据聚合与快照复用，不再沿用旧分析库叙述。
-- 后续应优先补齐流程/题库仓库真实后端接口，以及继续扩大浏览器回归范围。
+- 后续应优先扩大后台模块浏览器回归与异常路径覆盖，并清理 Playwright WebServer 启动警告。

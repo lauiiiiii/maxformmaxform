@@ -3,53 +3,65 @@ import bcrypt from 'bcryptjs'
 
 const TABLE = 'users'
 
+function getDb(options = {}) {
+  return options.db || knex
+}
+
 const User = {
-  async findById(id) {
-    return knex(TABLE).where('id', id).first()
+  async findById(id, options = {}) {
+    const db = getDb(options)
+    return db(TABLE).where('id', id).first()
   },
 
-  async findByUsername(username) {
-    return knex(TABLE).where('username', username).first()
+  async findByUsername(username, options = {}) {
+    const db = getDb(options)
+    return db(TABLE).where('username', username).first()
   },
 
-  async findByEmail(email) {
-    return knex(TABLE).where('email', email).first()
+  async findByEmail(email, options = {}) {
+    const db = getDb(options)
+    return db(TABLE).where('email', email).first()
   },
 
-  async create({ username, email, password, role_id, dept_id, position_id }) {
+  async create({ username, email, password, role_id, dept_id, position_id }, options = {}) {
+    const db = getDb(options)
     const hash = await bcrypt.hash(password, 10)
-    const [id] = await knex(TABLE).insert({
+    const [id] = await db(TABLE).insert({
       username, email, password: hash, role_id, dept_id, position_id
     })
-    return User.findById(id)
+    return User.findById(id, options)
   },
 
-  async update(id, fields) {
+  async update(id, fields, options = {}) {
+    const db = getDb(options)
     const allowed = ['email', 'avatar', 'is_active', 'dept_id', 'role_id', 'position_id']
     const data = {}
     for (const k of allowed) {
       if (fields[k] !== undefined) data[k] = fields[k]
     }
-    data.updated_at = knex.fn.now()
-    await knex(TABLE).where('id', id).update(data)
-    return User.findById(id)
+    data.updated_at = db.fn.now()
+    await db(TABLE).where('id', id).update(data)
+    return User.findById(id, options)
   },
 
-  async updatePassword(id, newPassword) {
+  async updatePassword(id, newPassword, options = {}) {
+    const db = getDb(options)
     const hash = await bcrypt.hash(newPassword, 10)
-    await knex(TABLE).where('id', id).update({ password: hash, updated_at: knex.fn.now() })
+    await db(TABLE).where('id', id).update({ password: hash, updated_at: db.fn.now() })
   },
 
-  async updateLastLogin(id) {
-    await knex(TABLE).where('id', id).update({ last_login_at: knex.fn.now() })
+  async updateLastLogin(id, options = {}) {
+    const db = getDb(options)
+    await db(TABLE).where('id', id).update({ last_login_at: db.fn.now() })
   },
 
   async verifyPassword(plaintext, hashed) {
     return bcrypt.compare(plaintext, hashed)
   },
 
-  async list({ page = 1, pageSize = 20, dept_id, is_active } = {}) {
-    let q = knex(TABLE).select('id', 'username', 'email', 'role_id', 'dept_id', 'position_id', 'avatar', 'is_active', 'last_login_at', 'created_at')
+  async list({ page = 1, pageSize = 20, dept_id, is_active } = {}, options = {}) {
+    const db = getDb(options)
+    let q = db(TABLE).select('id', 'username', 'email', 'role_id', 'dept_id', 'position_id', 'avatar', 'is_active', 'last_login_at', 'created_at')
     if (dept_id !== undefined) q = q.where('dept_id', dept_id)
     if (is_active !== undefined) q = q.where('is_active', is_active)
     const total = await q.clone().count('* as cnt').first().then(r => r.cnt)
@@ -57,8 +69,9 @@ const User = {
     return { total, list }
   },
 
-  async delete(id) {
-    return knex(TABLE).where('id', id).del()
+  async delete(id, options = {}) {
+    const db = getDb(options)
+    return db(TABLE).where('id', id).del()
   },
 
   toSafe(user) {

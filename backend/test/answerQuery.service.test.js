@@ -1,22 +1,22 @@
 import test, { afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import Answer from '../src/models/Answer.js'
 import Survey from '../src/models/Survey.js'
+import answerRepository from '../src/repositories/answerRepository.js'
 import {
   countAnswers,
   getAnswerForManagement,
   listAnswers
 } from '../src/services/answerQueryService.js'
 
-const originalAnswerCount = Answer.count
-const originalAnswerFindById = Answer.findById
-const originalAnswerList = Answer.list
+const originalAnswerCountBySurveyId = answerRepository.countBySurveyId
+const originalAnswerFindById = answerRepository.findById
+const originalAnswerList = answerRepository.list
 const originalSurveyFindById = Survey.findById
 
 afterEach(() => {
-  Answer.count = originalAnswerCount
-  Answer.findById = originalAnswerFindById
-  Answer.list = originalAnswerList
+  answerRepository.countBySurveyId = originalAnswerCountBySurveyId
+  answerRepository.findById = originalAnswerFindById
+  answerRepository.list = originalAnswerList
   Survey.findById = originalSurveyFindById
 })
 
@@ -38,7 +38,7 @@ test('listAnswers validates survey access and forwards normalized paging args', 
     creator_id: 1,
     title: `Survey ${id}`
   })
-  Answer.list = async payload => {
+  answerRepository.list = async payload => {
     listPayload = payload
     return { total: 1, list: [{ id: 11 }] }
   }
@@ -54,7 +54,23 @@ test('listAnswers validates survey access and forwards normalized paging args', 
     }
   })
 
-  assert.deepEqual(result, { total: 1, list: [{ id: 11 }] })
+  assert.deepEqual(result, {
+    total: 1,
+    page: 2,
+    pageSize: 5,
+    list: [{
+      id: 11,
+      survey_id: undefined,
+      surveyId: undefined,
+      answers_data: [],
+      ip_address: undefined,
+      user_agent: undefined,
+      duration: undefined,
+      status: undefined,
+      submitted_at: undefined,
+      submittedAt: undefined
+    }]
+  })
   assert.deepEqual(listPayload, {
     survey_id: 9,
     page: 2,
@@ -70,7 +86,7 @@ test('countAnswers returns the managed survey submission count', async () => {
     creator_id: 1,
     title: 'Managed Survey'
   })
-  Answer.count = async surveyId => {
+  answerRepository.countBySurveyId = async surveyId => {
     assert.equal(surveyId, 12)
     return 7
   }
@@ -84,7 +100,7 @@ test('countAnswers returns the managed survey submission count', async () => {
 })
 
 test('getAnswerForManagement loads the answer after survey authorization', async () => {
-  Answer.findById = async id => ({
+  answerRepository.findById = async id => ({
     id: Number(id),
     survey_id: 21,
     answers_data: []
@@ -102,4 +118,5 @@ test('getAnswerForManagement loads the answer after survey authorization', async
 
   assert.equal(result.id, 33)
   assert.equal(result.survey_id, 21)
+  assert.equal(result.surveyId, 21)
 })

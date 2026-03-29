@@ -3,7 +3,7 @@
   仅管理当前用户自己的问卷、数据和个人信息。
 -->
 <template>
-  <div class="user-dashboard-shell">
+  <div class="user-dashboard-shell" data-testid="user-dashboard-page">
     <!-- 顶部导航条 -->
     <header class="topbar">
       <div class="tb-left">
@@ -979,7 +979,9 @@ const refreshMessages = async () => { await loadMessages(msgUnreadOnly.value) }
 const loadUnreadCount = async () => {
   try {
     const { data } = await http.get('/messages', { params: { unread: 1, types: 'audit,system' } })
-    unreadCount.value = (data?.data || []).length
+    const payload = data?.data
+    const list = Array.isArray(payload) ? payload : (payload?.list || [])
+    unreadCount.value = list.length
   } catch {}
 }
 const loadMessages = async (unreadOnly = true) => {
@@ -988,7 +990,8 @@ const loadMessages = async (unreadOnly = true) => {
     const base = { types: 'audit,system' }
     const params = unreadOnly ? { ...base, unread: 1 } : base
     const { data } = await http.get('/messages', { params })
-    const list = (data?.data || [])
+    const payload = data?.data
+    const list = Array.isArray(payload) ? payload : (payload?.list || [])
     const getTime = (x:any) => {
       const t = Date.parse(x?.createdAt || x?.time || '')
       return isNaN(t) ? (Number(x?.id)||0) : t

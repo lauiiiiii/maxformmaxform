@@ -1,3 +1,4 @@
+import { MANAGEMENT_ERROR_CODES } from '../../../shared/management.contract.js'
 import { isAdmin, isOwner } from './accessPolicy.js'
 
 export function canManageFile(user, file) {
@@ -14,7 +15,7 @@ export function getManageFilePolicy(user, file) {
     status: 403,
     body: {
       success: false,
-      error: { code: 'FORBIDDEN', message: '无权删除该文件' }
+      error: { code: MANAGEMENT_ERROR_CODES.ACCESS_FORBIDDEN, message: 'No permission to delete this file' }
     }
   }
 }

@@ -1,28 +1,28 @@
 import Role from '../models/Role.js'
 
 const roleRepository = {
-  async findById(id) {
-    return Role.findById(id)
+  async findById(id, options = {}) {
+    return Role.findById(id, options)
   },
 
-  async findByCode(code) {
-    return Role.findByCode(code)
+  async findByCode(code, options = {}) {
+    return Role.findByCode(code, options)
   },
 
-  async create(payload) {
-    return Role.create(payload)
+  async create(payload, options = {}) {
+    return Role.create(payload, options)
   },
 
-  async update(id, fields) {
-    return Role.update(id, fields)
+  async update(id, fields, options = {}) {
+    return Role.update(id, fields, options)
   },
 
-  async delete(id) {
-    return Role.delete(id)
+  async delete(id, options = {}) {
+    return Role.delete(id, options)
   },
 
-  async list() {
-    return Role.list()
+  async list(options = {}) {
+    return Role.list(options)
   }
 }
 

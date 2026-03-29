@@ -4,27 +4,27 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { PassThrough } from 'node:stream'
 import ExcelJS from 'exceljs'
-import Answer from '../src/models/Answer.js'
-import FileModel from '../src/models/File.js'
 import Survey from '../src/models/Survey.js'
+import answerRepository from '../src/repositories/answerRepository.js'
+import fileRepository from '../src/repositories/fileRepository.js'
 import {
   createSurveyAnswerAttachmentsArchive,
   createSurveyAnswersWorkbookExport
 } from '../src/services/answerExportService.js'
 import { UPLOAD_DIR } from '../src/utils/uploadStorage.js'
 
-const originalAnswerFindBySurveyId = Answer.findBySurveyId
-const originalFileListAnswerFilesBySurveyId = FileModel.listAnswerFilesBySurveyId
+const originalAnswerListBySurveyId = answerRepository.listBySurveyId
+const originalFileListAnswerFilesBySurveyId = fileRepository.listAnswerFilesBySurveyId
 const originalSurveyFindById = Survey.findById
 
 afterEach(() => {
-  Answer.findBySurveyId = originalAnswerFindBySurveyId
-  FileModel.listAnswerFilesBySurveyId = originalFileListAnswerFilesBySurveyId
+  answerRepository.listBySurveyId = originalAnswerListBySurveyId
+  fileRepository.listAnswerFilesBySurveyId = originalFileListAnswerFilesBySurveyId
   Survey.findById = originalSurveyFindById
 })
 
 test('createSurveyAnswersWorkbookExport returns an xlsx payload for survey answers', async () => {
-  Answer.findBySurveyId = async () => ([
+  answerRepository.listBySurveyId = async () => ([
     {
       id: 81,
       submitted_at: '2026-03-28T12:00:00.000Z',
@@ -60,7 +60,7 @@ test('createSurveyAnswersWorkbookExport resolves the managed survey when surveyI
     creator_id: 1,
     title: `Survey ${id}`
   })
-  Answer.findBySurveyId = async surveyId => {
+  answerRepository.listBySurveyId = async surveyId => {
     resolvedSurveyId = surveyId
     return []
   }
@@ -76,7 +76,7 @@ test('createSurveyAnswersWorkbookExport resolves the managed survey when surveyI
 })
 
 test('createSurveyAnswerAttachmentsArchive rejects when no stored files exist on disk', async () => {
-  FileModel.listAnswerFilesBySurveyId = async () => ([
+  fileRepository.listAnswerFilesBySurveyId = async () => ([
     {
       id: 901,
       answer_id: 88,
@@ -88,7 +88,7 @@ test('createSurveyAnswerAttachmentsArchive rejects when no stored files exist on
 
   await assert.rejects(
     () => createSurveyAnswerAttachmentsArchive({ survey: { id: 66 } }),
-    error => error?.status === 404 && error?.body?.error?.code === 'NO_FILES'
+    error => error?.status === 404 && error?.body?.error?.code === 'NO_FILE'
   )
 })
 
@@ -97,7 +97,7 @@ test('createSurveyAnswerAttachmentsArchive returns a zip archive for existing fi
   const fixturePath = path.join(UPLOAD_DIR, fixtureName)
   fs.writeFileSync(fixturePath, 'attachment export fixture')
 
-  FileModel.listAnswerFilesBySurveyId = async () => ([
+  fileRepository.listAnswerFilesBySurveyId = async () => ([
     {
       id: 902,
       answer_id: 99,

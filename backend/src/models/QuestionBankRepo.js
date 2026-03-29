@@ -3,6 +3,10 @@ import knex from '../db/knex.js'
 const TABLE = 'question_bank_repos'
 const QUESTION_TABLE = 'question_bank_questions'
 
+function getDb(options = {}) {
+  return options.db || knex
+}
+
 function toDto(row) {
   if (!row) return null
   return {
@@ -14,8 +18,8 @@ function toDto(row) {
   }
 }
 
-function baseListQuery() {
-  return knex(`${TABLE} as r`)
+function baseListQuery(db = knex) {
+  return db(`${TABLE} as r`)
     .select(
       'r.id',
       'r.name',
@@ -29,36 +33,41 @@ function baseListQuery() {
 }
 
 const QuestionBankRepo = {
-  async findById(id) {
-    const row = await baseListQuery().where('r.id', id).first()
+  async findById(id, options = {}) {
+    const db = getDb(options)
+    const row = await baseListQuery(db).where('r.id', id).first()
     return toDto(row)
   },
 
-  async list() {
-    const rows = await baseListQuery().orderBy('r.id', 'asc')
+  async list(options = {}) {
+    const db = getDb(options)
+    const rows = await baseListQuery(db).orderBy('r.id', 'asc')
     return rows.map(toDto)
   },
 
-  async create({ name, description = null }) {
-    const [id] = await knex(TABLE).insert({
+  async create({ name, description = null }, options = {}) {
+    const db = getDb(options)
+    const [id] = await db(TABLE).insert({
       name,
       description,
-      updated_at: knex.fn.now()
+      updated_at: db.fn.now()
     })
-    return QuestionBankRepo.findById(id)
+    return QuestionBankRepo.findById(id, options)
   },
 
-  async update(id, fields) {
+  async update(id, fields, options = {}) {
+    const db = getDb(options)
     const data = {}
     if (fields.name !== undefined) data.name = fields.name
     if (fields.description !== undefined) data.description = fields.description
-    data.updated_at = knex.fn.now()
-    await knex(TABLE).where('id', id).update(data)
-    return QuestionBankRepo.findById(id)
+    data.updated_at = db.fn.now()
+    await db(TABLE).where('id', id).update(data)
+    return QuestionBankRepo.findById(id, options)
   },
 
-  async delete(id) {
-    return knex(TABLE).where('id', id).del()
+  async delete(id, options = {}) {
+    const db = getDb(options)
+    return db(TABLE).where('id', id).del()
   }
 }
 

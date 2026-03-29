@@ -1,28 +1,28 @@
 import Position from '../models/Position.js'
 
 const positionRepository = {
-  async findById(id) {
-    return Position.findById(id)
+  async findById(id, options = {}) {
+    return Position.findById(id, options)
   },
 
-  async findByCode(code) {
-    return Position.findByCode(code)
+  async findByCode(code, options = {}) {
+    return Position.findByCode(code, options)
   },
 
-  async list() {
-    return Position.list()
+  async list(options = {}) {
+    return Position.list(options)
   },
 
-  async create(payload) {
-    return Position.create(payload)
+  async create(payload, options = {}) {
+    return Position.create(payload, options)
   },
 
-  async update(id, fields) {
-    return Position.update(id, fields)
+  async update(id, fields, options = {}) {
+    return Position.update(id, fields, options)
   },
 
-  async delete(id) {
-    return Position.delete(id)
+  async delete(id, options = {}) {
+    return Position.delete(id, options)
   }
 }
 

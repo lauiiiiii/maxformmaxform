@@ -1,24 +1,24 @@
 import Flow from '../models/Flow.js'
 
 const flowRepository = {
-  async findById(id) {
-    return Flow.findById(id)
+  async findById(id, options = {}) {
+    return Flow.findById(id, options)
   },
 
-  async list() {
-    return Flow.list()
+  async list(options = {}) {
+    return Flow.list(options)
   },
 
-  async create(payload) {
-    return Flow.create(payload)
+  async create(payload, options = {}) {
+    return Flow.create(payload, options)
   },
 
-  async update(id, fields) {
-    return Flow.update(id, fields)
+  async update(id, fields, options = {}) {
+    return Flow.update(id, fields, options)
   },
 
-  async delete(id) {
-    return Flow.delete(id)
+  async delete(id, options = {}) {
+    return Flow.delete(id, options)
   }
 }
 

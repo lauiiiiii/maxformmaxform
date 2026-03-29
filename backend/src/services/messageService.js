@@ -3,6 +3,7 @@ import { getAuthenticatedActorPolicy } from '../policies/actorPolicy.js'
 import messageRepository from '../repositories/messageRepository.js'
 import {
   createMessageDto,
+  createMessagePageResult,
   MANAGEMENT_ERROR_CODES,
   normalizeMessageListQuery
 } from '../../../shared/management.contract.js'
@@ -14,7 +15,7 @@ function ensureAuthenticated(actor) {
 export async function listActorMessages({ actor, query = {} }) {
   ensureAuthenticated(actor)
   const normalized = normalizeMessageListQuery(query)
-  const list = await messageRepository.list({
+  const result = await messageRepository.list({
     recipient_id: actor.sub,
     page: normalized.page,
     pageSize: normalized.pageSize,
@@ -22,7 +23,11 @@ export async function listActorMessages({ actor, query = {} }) {
     types: normalized.types
   })
 
-  return list.map(item => createMessageDto(item))
+  return createMessagePageResult({
+    ...result,
+    page: normalized.page,
+    pageSize: normalized.pageSize
+  })
 }
 
 export async function markActorMessageRead({ actor, messageId }) {

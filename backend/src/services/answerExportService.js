@@ -2,19 +2,12 @@ import fs from 'fs'
 import path from 'path'
 import archiver from 'archiver'
 import ExcelJS from 'exceljs'
-import Answer from '../models/Answer.js'
-import FileModel from '../models/File.js'
+import { createResponseError } from '../http/errors.js'
+import answerRepository from '../repositories/answerRepository.js'
+import fileRepository from '../repositories/fileRepository.js'
 import { UPLOAD_DIR } from '../utils/uploadStorage.js'
 import { getManagedSurveyForAnswerRequest } from './answerQueryService.js'
-
-function createResponseError(status, body) {
-  const error = Object.assign(new Error(body?.error?.message || 'Request failed'), {
-    status,
-    body
-  })
-  if (body?.error?.code) error.code = body.error.code
-  return error
-}
+import { SURVEY_ERROR_CODES } from '../../../shared/survey.contract.js'
 
 function resolveExistingAnswerFiles(files = []) {
   return files
@@ -39,7 +32,7 @@ async function resolveManagedSurvey({ actor, surveyId, survey }) {
 
 export async function createSurveyAnswersWorkbookExport({ actor, surveyId, survey }) {
   const managedSurvey = await resolveManagedSurvey({ actor, surveyId, survey })
-  const answers = await Answer.findBySurveyId(managedSurvey.id)
+  const answers = await answerRepository.listBySurveyId(managedSurvey.id)
   const workbook = new ExcelJS.Workbook()
   const sheet = workbook.addWorksheet('Answers')
 
@@ -68,13 +61,13 @@ export async function createSurveyAnswersWorkbookExport({ actor, surveyId, surve
 
 export async function createSurveyAnswerAttachmentsArchive({ actor, surveyId, survey }) {
   const managedSurvey = await resolveManagedSurvey({ actor, surveyId, survey })
-  const files = await FileModel.listAnswerFilesBySurveyId(managedSurvey.id)
+  const files = await fileRepository.listAnswerFilesBySurveyId(managedSurvey.id)
   const existingFiles = resolveExistingAnswerFiles(files)
 
   if (existingFiles.length === 0) {
     throw createResponseError(404, {
       success: false,
-      error: { code: 'NO_FILES', message: 'No answer attachments are available for download' }
+      error: { code: SURVEY_ERROR_CODES.NO_FILE, message: 'No answer attachments are available for download' }
     })
   }
 

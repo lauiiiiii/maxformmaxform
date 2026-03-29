@@ -124,6 +124,25 @@ export interface SurveyTrashListQueryDTO extends PaginationQueryDTO {
   createdBy?: string
 }
 
+export interface AnswerDTO {
+  id: number
+  survey_id: number
+  surveyId?: number
+  answers_data: Array<Record<string, unknown>>
+  ip_address?: string
+  user_agent?: string
+  duration?: number
+  status?: string
+  submitted_at?: string
+  submittedAt?: string
+}
+
+export interface AnswerListQueryDTO extends PaginationQueryDTO {
+  survey_id?: number | string | null
+  startTime?: string | null
+  endTime?: string | null
+}
+
 export interface UploadedSurveyFileDTO {
   id: number
   name: string
@@ -272,6 +291,7 @@ export interface SurveyResultsDTO {
 
 export type SurveyPageDTO = PaginatedResultDTO<SurveyDTO>
 export type SurveyTrashPageDTO = PaginatedResultDTO<SurveyDTO>
+export type AnswerPageDTO = PaginatedResultDTO<AnswerDTO>
 
 export const SURVEY_STATUS: Readonly<{
   DRAFT: 'draft'
@@ -302,6 +322,7 @@ export const SURVEY_PAGINATION_DEFAULTS: Readonly<{
   page: 1
   pageSize: 20
   trashPageSize: 100
+  answersPageSize: 20
 }>
 
 export function normalizeSurveyFolderId(folderId?: number | string | null): number | null | undefined
@@ -319,12 +340,26 @@ export function normalizeSurveyTrashListQuery(query?: SurveyTrashListQueryDTO): 
   creator_id?: number | string
   createdBy?: string
 }
+export function normalizeAnswerListQuery(query?: AnswerListQueryDTO): {
+  page: number
+  pageSize: number
+  survey_id?: number
+  startTime?: string
+  endTime?: string
+}
 export function createSurveyPageResult<T>(input?: {
   list?: T[] | readonly T[] | null
   total?: number | string | null
   page?: number | string | null
   pageSize?: number | string | null
 }): PaginatedResultDTO<T>
+export function createAnswerDto(answer?: Partial<AnswerDTO> | null): AnswerDTO | null
+export function createAnswerPageResult<T extends Partial<AnswerDTO>>(input?: {
+  list?: T[] | readonly T[] | null
+  total?: number | string | null
+  page?: number | string | null
+  pageSize?: number | string | null
+}): AnswerPageDTO
 export function createSurveyUploadDto(file: {
   id?: number | string | null
   name?: string | null

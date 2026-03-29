@@ -2,6 +2,10 @@ import knex from '../db/knex.js'
 
 const TABLE = 'question_bank_questions'
 
+function getDb(options = {}) {
+  return options.db || knex
+}
+
 function toDto(row) {
   if (!row) return null
   return {
@@ -14,40 +18,45 @@ function toDto(row) {
 }
 
 const QuestionBankQuestion = {
-  async findById(id, repoId) {
-    let query = knex(TABLE).where('id', id)
+  async findById(id, repoId, options = {}) {
+    const db = getDb(options)
+    let query = db(TABLE).where('id', id)
     if (repoId !== undefined) query = query.andWhere('repo_id', repoId)
     const row = await query.first()
     return toDto(row)
   },
 
-  async listByRepoId(repoId) {
-    const rows = await knex(TABLE)
+  async listByRepoId(repoId, options = {}) {
+    const db = getDb(options)
+    const rows = await db(TABLE)
       .where('repo_id', repoId)
       .orderBy('id', 'asc')
     return rows.map(toDto)
   },
 
-  async create({ repo_id, title, type = null, difficulty = null, score = null }) {
-    const [id] = await knex(TABLE).insert({
+  async create({ repo_id, title, type = null, difficulty = null, score = null }, options = {}) {
+    const db = getDb(options)
+    const [id] = await db(TABLE).insert({
       repo_id,
       title,
       type,
       difficulty,
       score,
-      updated_at: knex.fn.now()
+      updated_at: db.fn.now()
     })
-    return QuestionBankQuestion.findById(id, repo_id)
+    return QuestionBankQuestion.findById(id, repo_id, options)
   },
 
-  async delete(id, repoId) {
-    let query = knex(TABLE).where('id', id)
+  async delete(id, repoId, options = {}) {
+    const db = getDb(options)
+    let query = db(TABLE).where('id', id)
     if (repoId !== undefined) query = query.andWhere('repo_id', repoId)
     return query.del()
   },
 
-  async deleteByRepoId(repoId) {
-    return knex(TABLE).where('repo_id', repoId).del()
+  async deleteByRepoId(repoId, options = {}) {
+    const db = getDb(options)
+    return db(TABLE).where('repo_id', repoId).del()
   }
 }
 

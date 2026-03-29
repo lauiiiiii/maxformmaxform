@@ -1,7 +1,7 @@
 import { throwManagementError, throwManagementPolicyError } from '../http/managementErrors.js'
 import { getAdminPolicy } from '../policies/adminPolicy.js'
 import userRepository from '../repositories/userRepository.js'
-import { createAuditMessage, recordAudit } from './activity.js'
+import { recordManagementAction, runManagementTransaction } from './activity.js'
 import {
   createUserDto,
   createUserImportResult,
@@ -40,26 +40,37 @@ export async function getManagedUser({ actor, identity }) {
 export async function createManagedUser({ actor, body = {} }) {
   ensureAdmin(actor)
 
-  const { username, email, password, role_id, dept_id, position_id } = body
-  if (!username || !password) {
-    throwManagementError(400, MANAGEMENT_ERROR_CODES.USER_REQUIRED_FIELDS, 'Username and password are required')
-  }
+  return runManagementTransaction(async db => {
+    const { username, email, password, role_id, dept_id, position_id } = body
+    if (!username || !password) {
+      throwManagementError(400, MANAGEMENT_ERROR_CODES.USER_REQUIRED_FIELDS, 'Username and password are required')
+    }
 
-  const existing = await userRepository.findByUsername(username)
-  if (existing) {
-    throwManagementError(409, MANAGEMENT_ERROR_CODES.USER_EXISTS, 'Username already exists')
-  }
+    const existing = await userRepository.findByUsername(username, { db })
+    if (existing) {
+      throwManagementError(409, MANAGEMENT_ERROR_CODES.USER_EXISTS, 'Username already exists')
+    }
 
-  const user = await userRepository.create({ username, email, password, role_id, dept_id, position_id })
-  await recordAudit({
-    actor,
-    action: 'user.create',
-    targetType: 'user',
-    targetId: user.id,
-    detail: `Created user ${user.username}`
+    const user = await userRepository.create({ username, email, password, role_id, dept_id, position_id }, { db })
+    await recordManagementAction({
+      actor,
+      audit: {
+        action: 'user.create',
+        targetType: 'user',
+        targetId: user.id,
+        detail: `Created user ${user.username}`
+      },
+      message: {
+        recipientId: actor.sub,
+        title: 'User created',
+        content: `User "${user.username}" was created.`,
+        entityType: 'user',
+        entityId: user.id
+      }
+    }, { db })
+
+    return createUserDto(userRepository.toSafe(user))
   })
-
-  return createUserDto(userRepository.toSafe(user))
 }
 
 export async function importManagedUsers({ actor, body = {} }) {
@@ -124,20 +135,23 @@ export async function importManagedUsers({ actor, body = {} }) {
     }
   }
 
-  await recordAudit({
-    actor,
-    action: 'user.import',
-    targetType: 'user',
-    targetId: null,
-    detail: `Imported users: created=${result.created}, skipped=${result.skipped}`
-  })
-  await createAuditMessage({
-    recipientId: actor.sub,
-    createdBy: actor.sub,
-    title: 'User import completed',
-    content: `Created ${result.created} users and skipped ${result.skipped}.`,
-    entityType: 'user',
-    entityId: null
+  await runManagementTransaction(async db => {
+    await recordManagementAction({
+      actor,
+      audit: {
+        action: 'user.import',
+        targetType: 'user',
+        targetId: null,
+        detail: `Imported users: created=${result.created}, skipped=${result.skipped}`
+      },
+      message: {
+        recipientId: actor.sub,
+        title: 'User import completed',
+        content: `Created ${result.created} users and skipped ${result.skipped}.`,
+        entityType: 'user',
+        entityId: null
+      }
+    }, { db })
   })
 
   return createUserImportResult(result)
@@ -146,51 +160,94 @@ export async function importManagedUsers({ actor, body = {} }) {
 export async function updateManagedUser({ actor, userId, body = {} }) {
   ensureAdmin(actor)
 
-  const { email, is_active, dept_id, role_id, position_id } = body
-  const user = await userRepository.update(userId, { email, is_active, dept_id, role_id, position_id })
+  return runManagementTransaction(async db => {
+    const { email, is_active, dept_id, role_id, position_id } = body
+    const user = await userRepository.update(userId, { email, is_active, dept_id, role_id, position_id }, { db })
 
-  if (!user) {
-    throwManagementError(404, MANAGEMENT_ERROR_CODES.USER_NOT_FOUND, 'User not found')
-  }
+    if (!user) {
+      throwManagementError(404, MANAGEMENT_ERROR_CODES.USER_NOT_FOUND, 'User not found')
+    }
 
-  await recordAudit({
-    actor,
-    action: 'user.update',
-    targetType: 'user',
-    targetId: user.id,
-    detail: `Updated user ${user.username}`
+    await recordManagementAction({
+      actor,
+      audit: {
+        action: 'user.update',
+        targetType: 'user',
+        targetId: user.id,
+        detail: `Updated user ${user.username}`
+      },
+      message: {
+        recipientId: actor.sub,
+        title: 'User updated',
+        content: `User "${user.username}" was updated.`,
+        entityType: 'user',
+        entityId: user.id
+      }
+    }, { db })
+
+    return createUserDto(userRepository.toSafe(user))
   })
-
-  return createUserDto(userRepository.toSafe(user))
 }
 
 export async function resetManagedUserPassword({ actor, userId, body = {} }) {
   ensureAdmin(actor)
 
-  const { password } = body
-  if (!password) {
-    throwManagementError(400, MANAGEMENT_ERROR_CODES.USER_PASSWORD_REQUIRED, 'Password is required')
-  }
+  await runManagementTransaction(async db => {
+    const { password } = body
+    if (!password) {
+      throwManagementError(400, MANAGEMENT_ERROR_CODES.USER_PASSWORD_REQUIRED, 'Password is required')
+    }
 
-  await userRepository.updatePassword(userId, password)
-  await recordAudit({
-    actor,
-    action: 'user.password.reset',
-    targetType: 'user',
-    targetId: userId,
-    detail: `Reset password for user ${userId}`
+    const user = await userRepository.findById(userId, { db })
+    if (!user) {
+      throwManagementError(404, MANAGEMENT_ERROR_CODES.USER_NOT_FOUND, 'User not found')
+    }
+
+    await userRepository.updatePassword(userId, password, { db })
+    await recordManagementAction({
+      actor,
+      audit: {
+        action: 'user.password.reset',
+        targetType: 'user',
+        targetId: user.id,
+        detail: `Reset password for user ${user.username}`
+      },
+      message: {
+        recipientId: actor.sub,
+        title: 'User password reset',
+        content: `Password for user "${user.username}" was reset.`,
+        entityType: 'user',
+        entityId: user.id
+      }
+    }, { db })
   })
 }
 
 export async function deleteManagedUser({ actor, userId }) {
   ensureAdmin(actor)
 
-  await userRepository.delete(userId)
-  await recordAudit({
-    actor,
-    action: 'user.delete',
-    targetType: 'user',
-    targetId: userId,
-    detail: `Deleted user ${userId}`
+  await runManagementTransaction(async db => {
+    const user = await userRepository.findById(userId, { db })
+    if (!user) {
+      throwManagementError(404, MANAGEMENT_ERROR_CODES.USER_NOT_FOUND, 'User not found')
+    }
+
+    await userRepository.delete(userId, { db })
+    await recordManagementAction({
+      actor,
+      audit: {
+        action: 'user.delete',
+        targetType: 'user',
+        targetId: user.id,
+        detail: `Deleted user ${user.username}`
+      },
+      message: {
+        recipientId: actor.sub,
+        title: 'User deleted',
+        content: `User "${user.username}" was deleted.`,
+        entityType: 'user',
+        entityId: user.id
+      }
+    }, { db })
   })
 }

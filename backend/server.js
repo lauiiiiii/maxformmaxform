@@ -11,8 +11,16 @@ async function start() {
     process.exit(1)
   }
 
-  const server = app.listen(config.port, () => {
-    console.log(`Server running: http://127.0.0.1:${config.port}`)
+  const requestedPort = config.port
+  const server = app.listen(requestedPort, () => {
+    const address = server.address()
+    const actualPort = typeof address === 'object' && address ? address.port : requestedPort
+    console.log(`Server running: http://127.0.0.1:${actualPort}`)
+  })
+
+  server.on('error', error => {
+    console.error('Server failed to start:', error)
+    process.exit(1)
   })
 
   const shutdown = async (signal) => {

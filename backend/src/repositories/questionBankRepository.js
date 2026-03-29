@@ -2,41 +2,41 @@ import QuestionBankQuestion from '../models/QuestionBankQuestion.js'
 import QuestionBankRepo from '../models/QuestionBankRepo.js'
 
 const questionBankRepository = {
-  async listRepos() {
-    return QuestionBankRepo.list()
+  async listRepos(options = {}) {
+    return QuestionBankRepo.list(options)
   },
 
-  async findRepoById(id) {
-    return QuestionBankRepo.findById(id)
+  async findRepoById(id, options = {}) {
+    return QuestionBankRepo.findById(id, options)
   },
 
-  async createRepo(payload) {
-    return QuestionBankRepo.create(payload)
+  async createRepo(payload, options = {}) {
+    return QuestionBankRepo.create(payload, options)
   },
 
-  async updateRepo(id, fields) {
-    return QuestionBankRepo.update(id, fields)
+  async updateRepo(id, fields, options = {}) {
+    return QuestionBankRepo.update(id, fields, options)
   },
 
-  async deleteRepo(id) {
-    await QuestionBankQuestion.deleteByRepoId(id)
-    return QuestionBankRepo.delete(id)
+  async deleteRepo(id, options = {}) {
+    await QuestionBankQuestion.deleteByRepoId(id, options)
+    return QuestionBankRepo.delete(id, options)
   },
 
-  async listQuestions(repoId) {
-    return QuestionBankQuestion.listByRepoId(repoId)
+  async listQuestions(repoId, options = {}) {
+    return QuestionBankQuestion.listByRepoId(repoId, options)
   },
 
-  async findQuestionById(questionId, repoId) {
-    return QuestionBankQuestion.findById(questionId, repoId)
+  async findQuestionById(questionId, repoId, options = {}) {
+    return QuestionBankQuestion.findById(questionId, repoId, options)
   },
 
-  async createQuestion(payload) {
-    return QuestionBankQuestion.create(payload)
+  async createQuestion(payload, options = {}) {
+    return QuestionBankQuestion.create(payload, options)
   },
 
-  async deleteQuestion(questionId, repoId) {
-    return QuestionBankQuestion.delete(questionId, repoId)
+  async deleteQuestion(questionId, repoId, options = {}) {
+    return QuestionBankQuestion.delete(questionId, repoId, options)
   }
 }
 

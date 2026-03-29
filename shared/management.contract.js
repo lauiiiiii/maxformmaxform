@@ -10,6 +10,7 @@ export const MANAGEMENT_ERROR_FAMILIES = Object.freeze({
   POSITION: `${MANAGEMENT_ERROR_PREFIX}_POSITION`,
   FOLDER: `${MANAGEMENT_ERROR_PREFIX}_FOLDER`,
   MESSAGE: `${MANAGEMENT_ERROR_PREFIX}_MESSAGE`,
+  FILE: `${MANAGEMENT_ERROR_PREFIX}_FILE`,
   FLOW: `${MANAGEMENT_ERROR_PREFIX}_FLOW`,
   QUESTION_BANK_REPO: `${MANAGEMENT_ERROR_PREFIX}_QUESTION_BANK_REPO`,
   QUESTION_BANK_QUESTION: `${MANAGEMENT_ERROR_PREFIX}_QUESTION_BANK_QUESTION`
@@ -41,6 +42,8 @@ export const MANAGEMENT_ERROR_CODES = Object.freeze({
   FOLDER_SELF_PARENT: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.FOLDER, 'SELF_PARENT'),
   FOLDER_HAS_CHILDREN: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.FOLDER, 'HAS_CHILDREN'),
   MESSAGE_NOT_FOUND: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.MESSAGE, 'NOT_FOUND'),
+  FILE_REQUIRED: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.FILE, 'REQUIRED'),
+  FILE_NOT_FOUND: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.FILE, 'NOT_FOUND'),
   FLOW_NAME_REQUIRED: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.FLOW, 'NAME_REQUIRED'),
   FLOW_STATUS_REQUIRED: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.FLOW, 'STATUS_REQUIRED'),
   FLOW_STATUS_INVALID: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.FLOW, 'STATUS_INVALID'),
@@ -57,7 +60,8 @@ export const MANAGEMENT_PAGINATION_DEFAULTS = Object.freeze({
   pageSize: 20,
   usersPageSize: 20,
   auditsPageSize: 20,
-  messagesPageSize: 50
+  messagesPageSize: 50,
+  filesPageSize: 20
 })
 
 function toNumberOrUndefined(value) {
@@ -331,6 +335,79 @@ export function createMessageDto(message) {
     readAt: message.readAt || null,
     createdAt: message.createdAt || null
   }
+}
+
+export function createMessagePageResult({ list = [], total = 0, page, pageSize } = {}) {
+  return createPaginatedResult({
+    list: Array.isArray(list) ? list.map(item => createMessageDto(item)) : [],
+    total,
+    page,
+    pageSize
+  })
+}
+
+export function normalizeFileListQuery(query = {}) {
+  const pagination = normalizePaginationQuery(query, {
+    page: MANAGEMENT_PAGINATION_DEFAULTS.page,
+    pageSize: MANAGEMENT_PAGINATION_DEFAULTS.filesPageSize
+  })
+
+  const uploaderId = toNumberOrUndefined(query?.uploader_id)
+  const surveyId = toNumberOrUndefined(query?.survey_id)
+
+  return {
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    ...(uploaderId !== undefined ? { uploader_id: uploaderId } : {}),
+    ...(surveyId !== undefined ? { survey_id: surveyId } : {})
+  }
+}
+
+export function createFileDto(file) {
+  if (!file) return null
+
+  const id = toNumberOrUndefined(file.id)
+  const uploaderId = toNumberOrUndefined(file.uploader_id ?? file.uploaderId)
+  const surveyId = toNumberOrUndefined(file.survey_id ?? file.surveyId)
+  const questionOrder = toNumberOrUndefined(file.question_order ?? file.questionOrder)
+  const answerId = toNumberOrUndefined(file.answer_id ?? file.answerId)
+  const size = toNumberOrUndefined(file.size)
+  const createdAt = file.created_at ?? file.createdAt
+  const updatedAt = file.updated_at ?? file.updatedAt
+
+  return {
+    ...file,
+    id,
+    name: String(file.name || ''),
+    url: file.url ? String(file.url) : undefined,
+    type: file.type ? String(file.type) : undefined,
+    size,
+    uploader_id: uploaderId,
+    survey_id: surveyId,
+    question_order: questionOrder,
+    answer_id: answerId,
+    public_token: file.public_token ?? file.publicToken,
+    submission_token: file.submission_token ?? file.submissionToken,
+    created_at: createdAt,
+    updated_at: updatedAt,
+    uploaderId,
+    surveyId,
+    questionOrder,
+    answerId,
+    publicToken: file.public_token ?? file.publicToken,
+    submissionToken: file.submission_token ?? file.submissionToken,
+    createdAt,
+    updatedAt
+  }
+}
+
+export function createFilePageResult({ list = [], total = 0, page, pageSize } = {}) {
+  return createPaginatedResult({
+    list: Array.isArray(list) ? list.map(item => createFileDto(item)) : [],
+    total,
+    page,
+    pageSize
+  })
 }
 
 export function normalizeAuditListQuery(query = {}) {

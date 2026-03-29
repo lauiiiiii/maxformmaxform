@@ -1,12 +1,23 @@
-import test from 'node:test'
+import test, { afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import jwt from 'jsonwebtoken'
-import FileModel from '../src/models/File.js'
 import config from '../src/config/index.js'
+import fileRepository from '../src/repositories/fileRepository.js'
 import { registerApiRouteHarness, UPLOAD_DIR } from './helpers/apiRouteHarness.js'
 
 const { request, requestPublic } = registerApiRouteHarness()
+const originalList = fileRepository.list
+const originalCreate = fileRepository.create
+const originalFindById = fileRepository.findById
+const originalDelete = fileRepository.delete
+
+afterEach(() => {
+  fileRepository.list = originalList
+  fileRepository.create = originalCreate
+  fileRepository.findById = originalFindById
+  fileRepository.delete = originalDelete
+})
 
 function createUserToken(payload = {}) {
   return jwt.sign(
@@ -19,7 +30,7 @@ function createUserToken(payload = {}) {
 test('GET /api/files lists files through the query service flow', async () => {
   let listPayload = null
 
-  FileModel.list = async payload => {
+  fileRepository.list = async payload => {
     listPayload = payload
     return { total: 1, list: [{ id: 1, name: 'a.pdf' }] }
   }
@@ -28,7 +39,12 @@ test('GET /api/files lists files through the query service flow', async () => {
 
   assert.equal(response.status, 200)
   assert.equal(json.success, true)
-  assert.deepEqual(json.data, { total: 1, list: [{ id: 1, name: 'a.pdf' }] })
+  assert.deepEqual(json.data, {
+    total: 1,
+    page: 2,
+    pageSize: 5,
+    list: [{ id: 1, name: 'a.pdf' }]
+  })
   assert.deepEqual(listPayload, {
     page: 2,
     pageSize: 5,
@@ -40,7 +56,7 @@ test('POST /api/files/upload saves the uploaded file through the command service
   let createdPayload = null
   let uploadedFilePath = null
 
-  FileModel.create = async payload => {
+  fileRepository.create = async payload => {
     createdPayload = payload
     return { id: 501, ...payload }
   }
@@ -68,10 +84,18 @@ test('POST /api/files/upload saves the uploaded file through the command service
   }
 })
 
+test('POST /api/files/upload validates missing file with management error code', async () => {
+  const { response, json } = await request('/files/upload', { method: 'POST' })
+
+  assert.equal(response.status, 400)
+  assert.equal(json.success, false)
+  assert.equal(json.error.code, 'MGMT_FILE_REQUIRED')
+})
+
 test('POST /api/files/upload/image returns image payload through the command service flow', async () => {
   let uploadedFilePath = null
 
-  FileModel.create = async payload => ({ id: 502, ...payload })
+  fileRepository.create = async payload => ({ id: 502, ...payload })
 
   const form = new FormData()
   form.append('file', new Blob(['hello image upload'], { type: 'image/png' }), 'image.png')
@@ -95,7 +119,7 @@ test('POST /api/files/upload/image returns image payload through the command ser
 })
 
 test('DELETE /api/files/:id rejects deleting files owned by another user', async () => {
-  FileModel.findById = async () => ({
+  fileRepository.findById = async () => ({
     id: 601,
     url: '/uploads/other.pdf',
     uploader_id: 9
@@ -108,7 +132,17 @@ test('DELETE /api/files/:id rejects deleting files owned by another user', async
 
   assert.equal(response.status, 403)
   assert.equal(json.success, false)
-  assert.equal(json.error.code, 'FORBIDDEN')
+  assert.equal(json.error.code, 'MGMT_ACCESS_FORBIDDEN')
+})
+
+test('DELETE /api/files/:id returns management not found code for missing files', async () => {
+  fileRepository.findById = async () => null
+
+  const { response, json } = await request('/files/999', { method: 'DELETE' })
+
+  assert.equal(response.status, 404)
+  assert.equal(json.success, false)
+  assert.equal(json.error.code, 'MGMT_FILE_NOT_FOUND')
 })
 
 test('DELETE /api/files/:id removes the stored file from db and disk', async () => {
@@ -117,12 +151,12 @@ test('DELETE /api/files/:id removes the stored file from db and disk', async () 
   fs.writeFileSync(fixturePath, 'delete me')
 
   let deletedId = null
-  FileModel.findById = async () => ({
+  fileRepository.findById = async () => ({
     id: 602,
     url: `/uploads/${fixtureName}`,
     uploader_id: 1
   })
-  FileModel.delete = async id => {
+  fileRepository.delete = async id => {
     deletedId = id
     return 1
   }

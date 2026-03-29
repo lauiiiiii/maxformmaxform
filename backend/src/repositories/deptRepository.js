@@ -1,40 +1,40 @@
 import Dept from '../models/Dept.js'
 
 const deptRepository = {
-  async findById(id) {
-    return Dept.findById(id)
+  async findById(id, options = {}) {
+    return Dept.findById(id, options)
   },
 
-  async create(payload) {
-    return Dept.create(payload)
+  async create(payload, options = {}) {
+    return Dept.create(payload, options)
   },
 
-  async update(id, fields) {
-    return Dept.update(id, fields)
+  async update(id, fields, options = {}) {
+    return Dept.update(id, fields, options)
   },
 
-  async delete(id) {
-    return Dept.delete(id)
+  async delete(id, options = {}) {
+    return Dept.delete(id, options)
   },
 
-  async countChildren(id) {
-    return Dept.countChildren(id)
+  async countChildren(id, options = {}) {
+    return Dept.countChildren(id, options)
   },
 
-  async countUsers(id) {
-    return Dept.countUsers(id)
+  async countUsers(id, options = {}) {
+    return Dept.countUsers(id, options)
   },
 
-  async clearUsersDept(id) {
-    return Dept.clearUsersDept(id)
+  async clearUsersDept(id, options = {}) {
+    return Dept.clearUsersDept(id, options)
   },
 
-  async list() {
-    return Dept.list()
+  async list(options = {}) {
+    return Dept.list(options)
   },
 
-  async tree() {
-    return Dept.tree()
+  async tree(options = {}) {
+    return Dept.tree(options)
   }
 }
 
