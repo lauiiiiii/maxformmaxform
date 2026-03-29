@@ -74,7 +74,7 @@
         </div>
 
         <div v-else-if="currentTab === 'preview'" class="preview-area embedded">
-          <SurveyPreviewEmbed v-bind="previewPanelBindings" />
+          <SurveyPreviewEmbed v-bind="previewPanel" />
         </div>
 
         <CreateSurveyPublishPanel v-else-if="currentTab === 'settings'" mode="settings" :context="publishPanel" />
@@ -99,7 +99,6 @@ import type {
   CreateSurveyTopToolbarContract
 } from './createSurveyPageContracts'
 import { createSurveyAnswersPanelContract } from './surveyAnswersPanelContract'
-import { createSurveyPreviewPanelContract } from './surveyPreviewPanelContract'
 import SurveyTopToolbar from './SurveyTopToolbar.vue'
 import SurveyPreviewEmbed from './SurveyPreviewEmbed.vue'
 import SurveyAnswersPanel from './SurveyAnswersPanel.vue'
@@ -135,10 +134,6 @@ const toolbarBindings = computed(() => ({
   currentTab: toolbar.currentTab.value,
   saving: toolbar.saving.value,
   canPublish: toolbar.canPublish.value
-}))
-
-const previewPanelBindings = computed(() => createSurveyPreviewPanelContract({
-  surveyForm: previewPanel.surveyForm
 }))
 
 const answersPanelBindings = computed(() => createSurveyAnswersPanelContract({

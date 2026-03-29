@@ -67,6 +67,11 @@ test('GET /api/surveys/:id/results returns question level statistics', async () 
       { type: 'date', title: 'Date' }
     ]
   })
+  Answer.getAggregateState = async () => ({
+    answerCount: 2,
+    latestAnswerId: 2,
+    latestSubmittedAt: now.toISOString()
+  })
 
   Answer.findBySurveyId = async () => ([
     {
@@ -160,6 +165,8 @@ test('GET /api/surveys/:id/results returns question level statistics', async () 
   })
   assert.equal(json.data.observability.snapshot.currentAccessMode, 'snapshot-rebuild')
   assert.equal(json.data.observability.snapshot.currentMissReason, 'missing')
+  assert.equal(json.data.observability.snapshot.record.exists, false)
+  assert.equal(json.data.observability.snapshot.source.answerCount, 2)
   assert.equal(json.data.observability.baseline.answerCount, 2)
   assert.equal(json.data.observability.baseline.largeSample, false)
 
@@ -284,7 +291,9 @@ test('GET /api/surveys/:id/results exposes large-sample baseline metrics on snap
     answerCount: 1200,
     latestAnswerId: 1200,
     latestSubmittedAt: '2026-03-28T12:00:00.000Z',
-    surveyUpdatedAt: '2026-03-28T09:00:00.000Z'
+    surveyUpdatedAt: '2026-03-28T09:00:00.000Z',
+    createdAt: '2026-03-28T12:01:00.000Z',
+    updatedAt: '2026-03-28T12:02:00.000Z'
   })
   Answer.findBySurveyId = async () => {
     throw new Error('findBySurveyId should not be called on snapshot hit')
@@ -296,6 +305,10 @@ test('GET /api/surveys/:id/results exposes large-sample baseline metrics on snap
   assert.equal(json.success, true)
   assert.equal(json.data.totalSubmissions, 1200)
   assert.equal(json.data.observability.snapshot.currentAccessMode, 'snapshot-hit')
+  assert.equal(json.data.observability.snapshot.record.exists, true)
+  assert.equal(json.data.observability.snapshot.record.updatedAt, '2026-03-28T12:02:00.000Z')
+  assert.ok(json.data.observability.snapshot.record.ageMs >= 0)
+  assert.equal(json.data.observability.snapshot.source.answerCount, 1200)
   assert.equal(json.data.observability.snapshot.hitRate, 100)
   assert.equal(json.data.observability.baseline.answerCount, 1200)
   assert.equal(json.data.observability.baseline.questionCount, 12)

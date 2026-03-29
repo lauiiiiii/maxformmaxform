@@ -1,233 +1,603 @@
-# API 接口说明（对齐当前实现）
+# API 接口说明
 
-> 2026-03-28 注：本文档仍保留部分旧版双库架构描述，尚未完全迁移到当前 `backend/app.js + backend/server.js + Express + Knex + MySQL` 实现。阅读时请优先以 `backend/src/routes/*`、`README0326.md`、`backend/README.md` 与 `docs/系统结构评估与优化建议-2026-03-27.md` 为准。
+基于源码状态更新时间：`2026-03-29`
 
-本文档列出后端可用接口的用途、请求/响应示例与常见错误码，但个别“健康检查 / analytics / 数据库适配器”相关段落仍在校准中。
+本文档只描述当前 `backend/app.js` 与 `backend/src/routes/*` 已挂载的真实接口，不再沿用旧版 MongoDB / ClickHouse / `DB_CLIENT` / `/analytics` 口径。
 
-- 基础地址（开发默认）：http://127.0.0.1:63002
-- 所有业务接口前缀：/api
-- 健康检查：/health（无前缀，返回 `dbClient`、`dbOk`、`mongoOk`、`clickhouseOk` 等字段）
-- 内容类型：application/json
-- 鉴权方式：JWT Bearer（部分接口无需登录）
+## 1. 基础信息
 
----
+- 开发默认基地址：`http://127.0.0.1:63002`
+- 业务接口前缀：`/api`
+- 健康检查：`GET /health`
+- 内容类型：`application/json`
+- 鉴权方式：`Authorization: Bearer <token>`
 
-## 鉴权与通用说明
+### 1.1 通用成功结构
 
-- 请求头：Authorization: Bearer <token>
-- 登录相关接口会返回 `token` 与 `user`；登录后访问需要鉴权的接口。
-- 常见响应结构（不同接口字段略有差异）：
-  - 成功：
-    ```json
-    { "success": true, "data": { /*...*/ }, "message": "可选" }
-    ```
-  - 失败（示例）：
-    ```json
-    { "success": false, "message": "错误描述" }
-    // 或 { "msg": "错误描述" }
-    // 或 { "error": "接口不存在" } （全局 404）
-    ```
-- 数据库适配器：所有接口的数据读写均经由 `backend/src/database` 的适配层完成，运行时可通过 `.env` 中的 `DB_CLIENT` 切换主库（默认 `mongo`）。不同适配器可能对部分返回字段（如健康检查）带来额外子项。
+```json
+{
+  "success": true,
+  "data": {}
+}
+```
 
----
+部分接口会额外返回：
 
-## 健康检查
+- `message`
+- `total`
+- 文件下载流响应
 
-- GET /health
-  - 说明：应用就绪探活；用于运维健康检查与联调排错。
-  - 响应示例：
-    ```json
-    {
-      "status": "OK",
-      "dbClient": "mongo",
-      "dbOk": true,
-      "mongoOk": true,
-      "clickhouseOk": true,
-      "time": "2025-01-01T00:00:00.000Z"
+### 1.2 通用错误结构
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "MGMT_USER_REQUIRED_FIELDS",
+    "message": "Readable error message"
+  }
+}
+```
+
+常见错误码：
+
+- `MGMT_ACCESS_FORBIDDEN`
+- `MGMT_USER_*`
+- `MGMT_ROLE_*`
+- `MGMT_DEPT_*`
+- `MGMT_POSITION_*`
+- `MGMT_FOLDER_*`
+- `MGMT_MESSAGE_*`
+- `MGMT_FLOW_*`
+- `MGMT_QUESTION_BANK_*`
+- `INVALID_TOKEN`
+- `AUTH_FAILED`
+
+## 2. 健康检查
+
+### `GET /health`
+
+说明：
+
+- 应用就绪探活
+
+响应示例：
+
+```json
+{
+  "status": "OK",
+  "time": "2026-03-29T03:00:00.000Z"
+}
+```
+
+## 3. 认证模块 `/api/auth`
+
+当前实现位于：
+
+- `backend/src/routes/auth.js`
+- `backend/src/services/authService.js`
+
+### `POST /api/auth/register`
+
+是否鉴权：
+
+- 否
+
+请求体：
+
+```json
+{
+  "username": "alice",
+  "email": "alice@example.com",
+  "password": "secret"
+}
+```
+
+成功响应：
+
+```json
+{
+  "success": true,
+  "data": {
+    "token": "<jwt>",
+    "user": {
+      "id": 1,
+      "username": "alice",
+      "email": "alice@example.com"
     }
-    ```
-  - 说明字段：`dbClient` 表示当前启用的主库适配器，`dbOk` 是主库整体可用状态，其余为具体子项（不同适配器可能返回对应的 `<engine>Ok`）。
-
----
-
-## 鉴权模块（/api/auth）
-
-### 1) 用户注册
-- POST /api/auth/register
-- 是否鉴权：否
-- 请求体：
-  ```json
-  { "username": "jerry", "email": "jerry@example.com", "password": "123456" }
-  ```
-- 成功响应：
-  ```json
-  { "success": true, "token": "<jwt>", "user": { "_id": "...", "username": "jerry", "email": "...", "role": "user" } }
-  ```
-- 失败情形：
-  - 400 缺少必填项：`{ "msg": "缺少必填项" }`
-  - 409 用户已存在：`{ "msg": "用户已存在" }`
-  - 500 服务器错误：`{ "msg": "<错误信息>" }`
-
-### 2) 用户登录
-- POST /api/auth/login
-- 是否鉴权：否
-- 请求体：
-  ```json
-  { "username": "jerry", "password": "123456" }
-  ```
-- 成功响应：
-  ```json
-  { "success": true, "token": "<jwt>", "user": { "_id": "...", "username": "jerry", "role": "user" } }
-  ```
-- 失败情形：
-  - 401 未授权：`{ "msg": "用户名或密码不正确" }`
-  - 500 服务器错误：`{ "msg": "<错误信息>" }`
-
-### 3) 获取当前用户信息
-- GET /api/auth/me
-- 是否鉴权：是（Authorization Bearer）
-- 成功响应：
-  ```json
-  { "success": true, "user": { "_id": "...", "username": "jerry", "role": "user" } }
-  ```
-- 失败情形：
-  - 401 未登录：`{ "msg": "未登录" }`
-  - 401 无效令牌：`{ "msg": "无效令牌" }`
-
----
-
-## 问卷模块（/api/surveys）
-
-说明：除查看单个问卷、提交答卷、查询结果/分析外，其他写操作均需要登录鉴权。
-
-### 1) 获取问卷列表
-- GET /api/surveys
-- 是否鉴权：是
-- 查询参数：无
-- 成功响应：
-  ```json
-  { "success": true, "data": [ { "_id": "...", "title": "...", "status": "..." } ] }
-  ```
-
-### 2) 创建问卷
-- POST /api/surveys
-- 是否鉴权：是
-- 请求体（示例）：
-  ```json
-  {
-    "title": "员工满意度调查",
-    "description": "",
-    "questions": [
-      { "type": "radio", "title": "问题1", "options": [ {"label": "是"}, {"label": "否"} ] }
-    ],
-    "settings": { },
-    "style": { }
   }
-  ```
-- 成功响应：`{ "success": true, "data": { "_id": "...", "title": "..." } }`
+}
+```
 
-### 3) 获取问卷详情
-- GET /api/surveys/:id
-- 是否鉴权：否
-- 说明：返回 questions，并按 `order` 排序，同时为前端方便新增自增 `id`（从 1 开始）。
-- 成功响应：`{ "success": true, "data": { "_id": "...", "questions": [ { "id": 1, "type": "radio", ... } ] } }`
-- 失败情形：
-  - 404 问卷不存在：`{ "success": false, "message": "问卷不存在" }`
+失败：
 
-### 4) 更新问卷
-- PUT /api/surveys/:id
-- 是否鉴权：是
-- 说明：会删除旧 questions 并用新 questions 全量覆盖。
-- 成功响应：`{ "success": true, "data": { /* 更新后的问卷 */ } }`
-- 失败情形：
-  - 404 问卷不存在
+- `400 MISSING_FIELDS`
+- `409 USER_EXISTS`
+- `409 EMAIL_EXISTS`
 
-### 5) 删除问卷
-- DELETE /api/surveys/:id
-- 是否鉴权：是
-- 说明：会同时删除该问卷下的题目。
-- 成功响应：`{ "success": true }`
-- 失败情形：
-  - 404 问卷不存在
+### `POST /api/auth/login`
 
-### 6) 发布问卷
-- POST /api/surveys/:id/publish
-- 是否鉴权：是
-- 最小校验：
-  - 标题非空
-  - 至少 1 题
-  - 单/多选题至少 2 个非空选项
-- 成功响应：`{ "success": true, "data": { "status": "published", ... } }`
-- 失败情形：
-  - 400 标题不能为空 / 至少需要一题 / 选项不能为空
-  - 404 问卷不存在
+是否鉴权：
 
-### 7) 关闭问卷
-- POST /api/surveys/:id/close
-- 是否鉴权：是
-- 成功响应：`{ "success": true, "data": { "status": "closed", ... } }`
-- 失败情形：
-  - 404 问卷不存在
+- 否
 
-### 8) 提交答卷
-- POST /api/surveys/:id/responses
-- 是否鉴权：否
-- 说明：默认通过主库适配器写入答卷（当前实现为 MongoDB 的 Answer 集合），ClickHouse 由后台复制器异步写入。
-- 请求体（示例）：
-  ```json
-  {
-    "answers": [
-      { "questionId": 1, "value": "A" },
-      { "questionId": 2, "value": ["A","B"] }
-    ]
+请求体：
+
+```json
+{
+  "username": "alice",
+  "password": "secret"
+}
+```
+
+成功响应：
+
+```json
+{
+  "success": true,
+  "data": {
+    "token": "<jwt>",
+    "user": {
+      "id": 1,
+      "username": "alice"
+    }
   }
-  ```
-- 成功响应：`{ "success": true, "message": "提交成功，感谢您的参与！", "responseId": "..." }`
-- 失败情形：
-  - 404 问卷不存在
-  - 400 问卷未发布或已关闭
-  - 500 服务器错误（保存失败）
+}
+```
 
-### 9) 简要结果（Mongo 聚合）
-- GET /api/surveys/:id/results
-- 是否鉴权：否
-- 说明：返回总提交数与最近一次提交时间（默认来自 Mongo 主库，可按适配器扩展）。
-- 成功响应：
-  ```json
-  { "success": true, "data": { "totalSubmissions": 123, "lastSubmitAt": "2025-01-01T00:00:00.000Z" } }
-  ```
+失败：
 
-### 10) 分析（ClickHouse 聚合）
-- GET /api/surveys/:id/analytics
-- 是否鉴权：否
-- 说明：直接从 ClickHouse 聚合；需要 Mongo→CH 的异步复制有效且 CH 可达。
-- 响应示例：
-  ```json
-  { "success": true, "data": [ { "questionId": "...", "questionType": "radio", "cnt": 100 } ] }
-  ```
-- 失败情形：
-  - 400 非法的ID（ObjectId 校验未通过）
-  - 500 服务端错误（ClickHouse 未就绪或查询异常）
+- `400 MISSING_FIELDS`
+- `401 AUTH_FAILED`
+- `403 USER_DISABLED`
 
----
+### `GET /api/auth/me`
 
-## 常见状态码与含义
+是否鉴权：
 
-- 200 OK：请求成功
-- 400 Bad Request：参数缺失/非法（如 ObjectId 校验失败、发布校验不通过）
-- 401 Unauthorized：未登录或令牌无效
-- 404 Not Found：
-  - 接口不存在（全局 404）：`{ "error": "接口不存在" }`
-  - 资源不存在（如问卷不存在）：`{ "success": false, "message": "问卷不存在" }`
-- 409 Conflict：资源冲突（如注册用户已存在）
-- 500 Internal Server Error：服务器内部错误（返回 `msg` 或 `message` 描述）
+- 是
 
----
+成功响应：
 
-## 其他说明
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": 1,
+      "username": "alice"
+    },
+    "role": {
+      "id": 2,
+      "code": "admin",
+      "name": "Admin"
+    }
+  }
+}
+```
 
-- 时间字段统一为 ISO 8601（UTC）字符串。
-- 生产环境建议开启 HTTPS、CORS 白名单、速率限制与审计日志。
-- 完整版后端默认启用 MongoDB 适配器（需副本集）与 ClickHouse；如需切换其他主库，请在 `.env` 设置 `DB_CLIENT` 并确保已实现对应适配器；健康检查以 `/health` 为准。
-- 适配器门面详见 `backend/src/database`，控制器统一通过 `database.getModel('<ModelName>')` 获取模型实例。
-- 更详细的数据模型与题型说明请参考：`backend/src/models/*` 与 `docs/题型规范.md`。
+失败：
+
+- `401 INVALID_TOKEN`
+
+## 4. 问卷模块 `/api/surveys`
+
+当前实现位于：
+
+- `backend/src/routes/surveys.js`
+- `backend/src/services/surveyQueryService.js`
+- `backend/src/services/surveyCommandService.js`
+- `backend/src/services/surveyUploadService.js`
+- `backend/src/services/surveyResultsService.js`
+
+### 4.1 后台问卷管理
+
+需要登录：
+
+- `GET /api/surveys`
+- `GET /api/surveys/trash`
+- `DELETE /api/surveys/trash`
+- `POST /api/surveys`
+- `PUT /api/surveys/:id`
+- `DELETE /api/surveys/:id`
+- `POST /api/surveys/:id/restore`
+- `DELETE /api/surveys/:id/force`
+- `POST /api/surveys/:id/publish`
+- `POST /api/surveys/:id/close`
+- `PUT /api/surveys/:id/folder`
+- `GET /api/surveys/:id/results`
+
+典型创建请求：
+
+```json
+{
+  "title": "满意度调查",
+  "description": "2026 Q1",
+  "questions": [
+    {
+      "type": "radio",
+      "title": "你是否满意？",
+      "options": [
+        { "label": "是" },
+        { "label": "否" }
+      ]
+    }
+  ],
+  "settings": {
+    "allowMultipleSubmissions": true
+  },
+  "style": {}
+}
+```
+
+### 4.2 公开读取
+
+无需登录或可选登录：
+
+- `GET /api/surveys/share/:code`
+- `GET /api/surveys/:id`
+
+说明：
+
+- 公开页读取会按当前分享状态、发布状态和访问策略做限制。
+
+### 4.3 公开上传题
+
+### `POST /api/surveys/:id/uploads`
+
+是否鉴权：
+
+- 可选登录
+
+额外限制：
+
+- `15` 分钟窗口内最多 `20` 次请求
+
+表单字段：
+
+- `file`
+- `questionId`
+- `submissionToken`
+
+说明：
+
+- question-scoped 上传要求 `questionId + submissionToken`
+- 成功后返回文件记录与 `uploadToken`
+- 后续答卷提交使用最小引用：`id + uploadToken`
+
+### 4.4 公开提交答卷
+
+### `POST /api/surveys/:id/responses`
+
+是否鉴权：
+
+- 否
+
+请求体示例：
+
+```json
+{
+  "answers": [
+    { "questionId": 1, "value": "A" },
+    { "questionId": 2, "value": ["A", "B"] },
+    {
+      "questionId": 3,
+      "value": [
+        { "id": 9, "uploadToken": "token-1" }
+      ]
+    }
+  ],
+  "duration": 35,
+  "clientSubmissionToken": "optional-client-token"
+}
+```
+
+成功响应：
+
+```json
+{
+  "success": true,
+  "message": "Submitted successfully",
+  "data": {
+    "id": 123,
+    "surveyId": 5
+  }
+}
+```
+
+失败：
+
+- `400` 未发布或已关闭
+- `400` 上传题超限
+- `400` 上传 token 不匹配
+- `400` 题型校验失败
+
+### 4.5 结果接口
+
+### `GET /api/surveys/:id/results`
+
+是否鉴权：
+
+- 是
+
+返回字段包含：
+
+- `totalSubmissions`
+- `today`
+- `completed`
+- `incomplete`
+- `completionRate`
+- `avgDuration`
+- `avgTime`
+- `lastSubmitAt`
+- `submissionTrend`
+- `regionStats`
+- `systemStats`
+- `questionStats`
+- `observability`
+
+`observability.snapshot` 当前包含：
+
+- `currentAccessMode`
+- `currentMissReason`
+- `record.exists`
+- `record.createdAt`
+- `record.updatedAt`
+- `record.ageMs`
+- `record.answerCount`
+- `record.latestAnswerId`
+- `record.latestSubmittedAt`
+- `record.surveyUpdatedAt`
+- `source.answerCount`
+- `source.latestAnswerId`
+- `source.latestSubmittedAt`
+- `source.surveyUpdatedAt`
+- `requests`
+- `hits`
+- `misses`
+- `hitRate`
+- `rebuilds`
+- `readErrors`
+- `persistErrors`
+- `rebuildDurationMs`
+
+说明：
+
+- 当前结果统计来自 MySQL 答卷聚合与本地结果快照复用。
+- 不存在 `/api/surveys/:id/analytics` 正式接口。
+
+## 5. 答卷模块 `/api/answers`
+
+当前实现位于：
+
+- `backend/src/routes/answers.js`
+- `backend/src/services/answerQueryService.js`
+- `backend/src/services/answerCommandService.js`
+- `backend/src/services/answerExportService.js`
+
+全部接口都需要登录。
+
+### `GET /api/answers`
+
+说明：
+
+- 分页查询答卷
+
+常用查询参数：
+
+- `survey_id`
+- `page`
+- `pageSize`
+
+### `GET /api/answers/count`
+
+说明：
+
+- 查询答卷数量
+
+### `GET /api/answers/:id`
+
+说明：
+
+- 查询单份答卷明细
+
+### `DELETE /api/answers/batch`
+
+请求体：
+
+```json
+{
+  "ids": [1, 2, 3]
+}
+```
+
+说明：
+
+- 批量删除答卷
+- 会同步清理已绑定附件并更新问卷统计
+
+### `POST /api/answers/download/survey`
+
+请求体：
+
+```json
+{
+  "survey_id": 5
+}
+```
+
+说明：
+
+- 返回问卷答卷 Excel 文件流
+
+### `POST /api/answers/download/attachments`
+
+请求体：
+
+```json
+{
+  "survey_id": 5
+}
+```
+
+说明：
+
+- 返回问卷附件 zip 文件流
+
+## 6. 后台文件模块 `/api/files`
+
+全部接口都需要登录。
+
+### `GET /api/files`
+
+说明：
+
+- 查询当前用户可管理文件
+
+### `POST /api/files/upload`
+
+表单字段：
+
+- `file`
+
+说明：
+
+- 普通文件上传
+
+### `POST /api/files/upload/image`
+
+表单字段：
+
+- `file`
+
+说明：
+
+- 图片上传
+
+### `DELETE /api/files/:id`
+
+说明：
+
+- 删除当前用户可管理文件
+
+## 7. 用户与组织模块
+
+### 7.1 用户 `/api/users`
+
+当前实现位于 `backend/src/services/userService.js`。
+
+所有接口都需要登录，且实际访问要求管理员。
+
+- `GET /api/users`
+- `GET /api/users/:id`
+- `POST /api/users`
+- `POST /api/users/import`
+- `PUT /api/users/:id`
+- `PUT /api/users/:id/password`
+- `DELETE /api/users/:id`
+
+`POST /api/users/import` 请求体示例：
+
+```json
+{
+  "users": [
+    {
+      "username": "alice",
+      "password": "secret",
+      "email": "alice@example.com",
+      "role_id": 2,
+      "dept_id": 1,
+      "position_id": 3
+    }
+  ]
+}
+```
+
+### 7.2 角色 `/api/roles`
+
+所有接口都需要登录，且实际访问要求管理员。
+
+- `GET /api/roles`
+- `POST /api/roles`
+- `PUT /api/roles/:id`
+- `DELETE /api/roles/:id`
+
+### 7.3 部门 `/api/depts`
+
+当前权限：
+
+- `GET /api/depts`：登录即可
+- `GET /api/depts/tree`：登录即可
+- `POST /api/depts`：管理员
+- `PUT /api/depts/:id`：管理员
+- `DELETE /api/depts/:id`：管理员
+
+### 7.4 职位 `/api/positions`
+
+当前权限：
+
+- `GET /api/positions`：登录即可
+- `POST /api/positions`：管理员
+- `PUT /api/positions/:id`：管理员
+- `DELETE /api/positions/:id`：管理员
+
+## 8. 文件夹、消息、审计
+
+### 8.1 文件夹 `/api/folders`
+
+全部接口都需要登录，按当前用户所有权访问。
+
+- `GET /api/folders`
+- `GET /api/folders/all`
+- `POST /api/folders`
+- `PUT /api/folders/:id`
+- `DELETE /api/folders/:id`
+
+说明：
+
+- 删除含子文件夹时会返回 `409 MGMT_FOLDER_HAS_CHILDREN`
+- 删除文件夹时会将该目录下问卷移到根目录
+
+### 8.2 消息 `/api/messages`
+
+全部接口都需要登录。
+
+- `GET /api/messages`
+- `POST /api/messages/:id/read`
+
+消息查询支持：
+
+- `page`
+- `pageSize`
+- `unread`
+- `types`
+
+### 8.3 审计 `/api/audits`
+
+接口：
+
+- `GET /api/audits`
+
+路由层只要求登录，但 service 层实际要求管理员。
+
+支持查询参数：
+
+- `page`
+- `pageSize`
+- `username`
+- `action`
+- `targetType`
+
+## 9. 当前未提供的正式接口
+
+以下能力在当前仓库里不是正式后端接口，请不要按旧文档调用：
+
+- `/api/surveys/:id/analytics`
+- 基于 `DB_CLIENT` 切换数据库
+- 流程管理正式接口
+- 题库仓库正式接口
+
+当前流程与题库仓库只有共享 DTO 与前端占位 API：
+
+- `frontend/src/api/flows.ts`
+- `frontend/src/api/repos.ts`

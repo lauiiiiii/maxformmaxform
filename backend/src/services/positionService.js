@@ -1,13 +1,19 @@
-import { createResponseError, throwPolicyError } from '../http/errors.js'
+import { throwManagementError, throwManagementPolicyError } from '../http/managementErrors.js'
 import { getAdminPolicy } from '../policies/adminPolicy.js'
+import { getAuthenticatedActorPolicy } from '../policies/actorPolicy.js'
 import positionRepository from '../repositories/positionRepository.js'
 import { createPositionDto, MANAGEMENT_ERROR_CODES } from '../../../shared/management.contract.js'
 
 function ensureAdmin(actor) {
-  throwPolicyError(getAdminPolicy(actor))
+  throwManagementPolicyError(getAdminPolicy(actor))
 }
 
-export async function listManagedPositions() {
+function ensureAuthenticated(actor) {
+  throwManagementPolicyError(getAuthenticatedActorPolicy(actor))
+}
+
+export async function listManagedPositions({ actor }) {
+  ensureAuthenticated(actor)
   const positions = await positionRepository.list()
   return positions.map(item => createPositionDto(item))
 }
@@ -19,19 +25,13 @@ export async function createManagedPosition({ actor, body = {} }) {
   const normalizedCode = String(body.code || '').trim() || null
 
   if (!normalizedName) {
-    throw createResponseError(400, {
-      success: false,
-      error: { code: MANAGEMENT_ERROR_CODES.VALIDATION, message: 'Position name is required' }
-    })
+    throwManagementError(400, MANAGEMENT_ERROR_CODES.POSITION_NAME_REQUIRED, 'Position name is required')
   }
 
   if (normalizedCode) {
     const existing = await positionRepository.findByCode(normalizedCode)
     if (existing) {
-      throw createResponseError(409, {
-        success: false,
-        error: { code: MANAGEMENT_ERROR_CODES.POSITION_EXISTS, message: 'Position code already exists' }
-      })
+      throwManagementError(409, MANAGEMENT_ERROR_CODES.POSITION_EXISTS, 'Position code already exists')
     }
   }
 
@@ -49,20 +49,14 @@ export async function updateManagedPosition({ actor, positionId, body = {} }) {
 
   const existing = await positionRepository.findById(positionId)
   if (!existing) {
-    throw createResponseError(404, {
-      success: false,
-      error: { code: MANAGEMENT_ERROR_CODES.NOT_FOUND, message: 'Position not found' }
-    })
+    throwManagementError(404, MANAGEMENT_ERROR_CODES.POSITION_NOT_FOUND, 'Position not found')
   }
 
   const normalizedCode = body.code === undefined ? undefined : (String(body.code || '').trim() || null)
   if (normalizedCode) {
     const duplicate = await positionRepository.findByCode(normalizedCode)
     if (duplicate && Number(duplicate.id) !== Number(existing.id)) {
-      throw createResponseError(409, {
-        success: false,
-        error: { code: MANAGEMENT_ERROR_CODES.POSITION_EXISTS, message: 'Position code already exists' }
-      })
+      throwManagementError(409, MANAGEMENT_ERROR_CODES.POSITION_EXISTS, 'Position code already exists')
     }
   }
 
@@ -82,10 +76,7 @@ export async function deleteManagedPosition({ actor, positionId }) {
 
   const existing = await positionRepository.findById(positionId)
   if (!existing) {
-    throw createResponseError(404, {
-      success: false,
-      error: { code: MANAGEMENT_ERROR_CODES.NOT_FOUND, message: 'Position not found' }
-    })
+    throwManagementError(404, MANAGEMENT_ERROR_CODES.POSITION_NOT_FOUND, 'Position not found')
   }
 
   await positionRepository.delete(positionId)

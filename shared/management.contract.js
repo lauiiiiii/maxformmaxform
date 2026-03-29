@@ -1,15 +1,55 @@
 import { createPaginatedResult, normalizePaginationQuery } from './pagination.contract.js'
 
+export const MANAGEMENT_ERROR_PREFIX = 'MGMT'
+
+export const MANAGEMENT_ERROR_FAMILIES = Object.freeze({
+  ACCESS: `${MANAGEMENT_ERROR_PREFIX}_ACCESS`,
+  USER: `${MANAGEMENT_ERROR_PREFIX}_USER`,
+  ROLE: `${MANAGEMENT_ERROR_PREFIX}_ROLE`,
+  DEPT: `${MANAGEMENT_ERROR_PREFIX}_DEPT`,
+  POSITION: `${MANAGEMENT_ERROR_PREFIX}_POSITION`,
+  FOLDER: `${MANAGEMENT_ERROR_PREFIX}_FOLDER`,
+  MESSAGE: `${MANAGEMENT_ERROR_PREFIX}_MESSAGE`,
+  FLOW: `${MANAGEMENT_ERROR_PREFIX}_FLOW`,
+  QUESTION_BANK_REPO: `${MANAGEMENT_ERROR_PREFIX}_QUESTION_BANK_REPO`,
+  QUESTION_BANK_QUESTION: `${MANAGEMENT_ERROR_PREFIX}_QUESTION_BANK_QUESTION`
+})
+
+function createManagementErrorCode(family, reason) {
+  return `${family}_${reason}`
+}
+
 export const MANAGEMENT_ERROR_CODES = Object.freeze({
-  NOT_FOUND: 'NOT_FOUND',
-  FORBIDDEN: 'FORBIDDEN',
-  VALIDATION: 'VALIDATION',
-  USER_EXISTS: 'USER_EXISTS',
-  ROLE_EXISTS: 'ROLE_EXISTS',
-  POSITION_EXISTS: 'POSITION_EXISTS',
-  DEPT_HAS_CHILDREN: 'DEPT_HAS_CHILDREN',
-  FOLDER_HAS_CHILDREN: 'FOLDER_HAS_CHILDREN',
-  PARENT_FOLDER_NOT_FOUND: 'PARENT_FOLDER_NOT_FOUND'
+  ACCESS_FORBIDDEN: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.ACCESS, 'FORBIDDEN'),
+  USER_NOT_FOUND: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.USER, 'NOT_FOUND'),
+  USER_REQUIRED_FIELDS: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.USER, 'REQUIRED_FIELDS'),
+  USER_EXISTS: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.USER, 'EXISTS'),
+  USER_IMPORT_PAYLOAD_INVALID: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.USER, 'IMPORT_PAYLOAD_INVALID'),
+  USER_PASSWORD_REQUIRED: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.USER, 'PASSWORD_REQUIRED'),
+  ROLE_NOT_FOUND: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.ROLE, 'NOT_FOUND'),
+  ROLE_REQUIRED_FIELDS: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.ROLE, 'REQUIRED_FIELDS'),
+  ROLE_EXISTS: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.ROLE, 'EXISTS'),
+  DEPT_NAME_REQUIRED: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.DEPT, 'NAME_REQUIRED'),
+  DEPT_NOT_FOUND: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.DEPT, 'NOT_FOUND'),
+  DEPT_HAS_CHILDREN: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.DEPT, 'HAS_CHILDREN'),
+  POSITION_NAME_REQUIRED: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.POSITION, 'NAME_REQUIRED'),
+  POSITION_NOT_FOUND: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.POSITION, 'NOT_FOUND'),
+  POSITION_EXISTS: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.POSITION, 'EXISTS'),
+  FOLDER_NOT_FOUND: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.FOLDER, 'NOT_FOUND'),
+  FOLDER_NAME_REQUIRED: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.FOLDER, 'NAME_REQUIRED'),
+  FOLDER_PARENT_NOT_FOUND: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.FOLDER, 'PARENT_NOT_FOUND'),
+  FOLDER_SELF_PARENT: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.FOLDER, 'SELF_PARENT'),
+  FOLDER_HAS_CHILDREN: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.FOLDER, 'HAS_CHILDREN'),
+  MESSAGE_NOT_FOUND: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.MESSAGE, 'NOT_FOUND'),
+  FLOW_NAME_REQUIRED: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.FLOW, 'NAME_REQUIRED'),
+  FLOW_STATUS_REQUIRED: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.FLOW, 'STATUS_REQUIRED'),
+  FLOW_STATUS_INVALID: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.FLOW, 'STATUS_INVALID'),
+  FLOW_NOT_FOUND: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.FLOW, 'NOT_FOUND'),
+  QUESTION_BANK_REPO_NAME_REQUIRED: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.QUESTION_BANK_REPO, 'NAME_REQUIRED'),
+  QUESTION_BANK_REPO_NOT_FOUND: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.QUESTION_BANK_REPO, 'NOT_FOUND'),
+  QUESTION_BANK_QUESTION_TITLE_REQUIRED: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.QUESTION_BANK_QUESTION, 'TITLE_REQUIRED'),
+  QUESTION_BANK_QUESTION_SCORE_INVALID: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.QUESTION_BANK_QUESTION, 'SCORE_INVALID'),
+  QUESTION_BANK_QUESTION_NOT_FOUND: createManagementErrorCode(MANAGEMENT_ERROR_FAMILIES.QUESTION_BANK_QUESTION, 'NOT_FOUND')
 })
 
 export const MANAGEMENT_PAGINATION_DEFAULTS = Object.freeze({
@@ -164,6 +204,73 @@ export function createPositionDto(position) {
     created_at: createdAt,
     updated_at: updatedAt,
     isVirtual,
+    createdAt,
+    updatedAt
+  }
+}
+
+export function createFlowDto(flow) {
+  if (!flow) return null
+
+  const id = toNumberOrUndefined(flow.id)
+  const createdAt = flow.created_at ?? flow.createdAt
+  const updatedAt = flow.updated_at ?? flow.updatedAt
+
+  return {
+    ...flow,
+    id,
+    name: String(flow.name || ''),
+    status: flow.status ? String(flow.status) : undefined,
+    description: flow.description ? String(flow.description) : undefined,
+    created_at: createdAt,
+    updated_at: updatedAt,
+    createdAt,
+    updatedAt
+  }
+}
+
+export function createQuestionBankRepoDto(repo) {
+  if (!repo) return null
+
+  const id = toNumberOrUndefined(repo.id)
+  const questionCount = Number(repo.questionCount ?? repo.question_count ?? 0)
+  const createdAt = repo.created_at ?? repo.createdAt
+  const updatedAt = repo.updated_at ?? repo.updatedAt
+
+  return {
+    ...repo,
+    id,
+    name: String(repo.name || ''),
+    description: repo.description ? String(repo.description) : undefined,
+    question_count: questionCount,
+    questionCount,
+    created_at: createdAt,
+    updated_at: updatedAt,
+    createdAt,
+    updatedAt
+  }
+}
+
+export function createQuestionBankQuestionDto(question) {
+  if (!question) return null
+
+  const id = toNumberOrUndefined(question.id)
+  const repoId = toNumberOrUndefined(question.repo_id ?? question.repoId)
+  const score = toNumberOrUndefined(question.score)
+  const createdAt = question.created_at ?? question.createdAt
+  const updatedAt = question.updated_at ?? question.updatedAt
+
+  return {
+    ...question,
+    id,
+    repo_id: repoId,
+    repoId,
+    title: String(question.title || ''),
+    type: question.type ? String(question.type) : undefined,
+    difficulty: question.difficulty ? String(question.difficulty) : undefined,
+    score,
+    created_at: createdAt,
+    updated_at: updatedAt,
     createdAt,
     updatedAt
   }

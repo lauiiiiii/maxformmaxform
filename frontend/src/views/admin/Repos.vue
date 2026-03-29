@@ -40,15 +40,24 @@
 </template>
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { listRepos, createRepo, updateRepo, deleteRepo, listBankQuestions, addBankQuestion, removeBankQuestion, type RepoItem, type BankQuestion } from '@/api/repos'
+import {
+  listRepos,
+  createRepo,
+  deleteRepo,
+  listBankQuestions,
+  addBankQuestion,
+  removeBankQuestion,
+  type QuestionBankRepoDTO,
+  type QuestionBankQuestionDTO
+} from '@/api/repos'
 
-const repos = ref<RepoItem[]>([])
+const repos = ref<QuestionBankRepoDTO[]>([])
 const loading = ref(false)
 const newRepoName = ref('')
 
 const drawer = ref(false)
-const activeRepo = ref<RepoItem | null>(null)
-const questions = ref<BankQuestion[]>([])
+const activeRepo = ref<QuestionBankRepoDTO | null>(null)
+const questions = ref<QuestionBankQuestionDTO[]>([])
 const qLoading = ref(false)
 const newQTitle = ref('')
 const newQType = ref('radio')
@@ -71,7 +80,7 @@ const removeRepo = async (id?: number) => {
   repos.value = repos.value.filter(r => r.id !== id)
 }
 
-const selectRepo = async (row: RepoItem) => {
+const selectRepo = async (row: QuestionBankRepoDTO) => {
   if (row.id == null) return
   activeRepo.value = row
   drawer.value = true

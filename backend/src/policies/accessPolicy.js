@@ -1,3 +1,7 @@
+export function isAuthenticated(user) {
+  return user?.sub !== undefined && user?.sub !== null && user?.sub !== ''
+}
+
 export function isAdmin(user) {
   return user?.roleCode === 'admin'
 }

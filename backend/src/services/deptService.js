@@ -1,19 +1,26 @@
-import { createResponseError, throwPolicyError } from '../http/errors.js'
+import { throwManagementError, throwManagementPolicyError } from '../http/managementErrors.js'
 import { getAdminPolicy } from '../policies/adminPolicy.js'
+import { getAuthenticatedActorPolicy } from '../policies/actorPolicy.js'
 import deptRepository from '../repositories/deptRepository.js'
 import { createAuditMessage, recordAudit } from './activity.js'
 import { createDeptDto, MANAGEMENT_ERROR_CODES } from '../../../shared/management.contract.js'
 
 function ensureAdmin(actor) {
-  throwPolicyError(getAdminPolicy(actor))
+  throwManagementPolicyError(getAdminPolicy(actor))
 }
 
-export async function listManagedDepts() {
+function ensureAuthenticated(actor) {
+  throwManagementPolicyError(getAuthenticatedActorPolicy(actor))
+}
+
+export async function listManagedDepts({ actor }) {
+  ensureAuthenticated(actor)
   const list = await deptRepository.list()
   return list.map(item => createDeptDto(item))
 }
 
-export async function getManagedDeptTree() {
+export async function getManagedDeptTree({ actor }) {
+  ensureAuthenticated(actor)
   const tree = await deptRepository.tree()
   return tree.map(item => createDeptDto(item))
 }
@@ -23,10 +30,7 @@ export async function createManagedDept({ actor, body = {} }) {
 
   const name = String(body.name || '').trim()
   if (!name) {
-    throw createResponseError(400, {
-      success: false,
-      error: { code: MANAGEMENT_ERROR_CODES.VALIDATION, message: 'Department name is required' }
-    })
+    throwManagementError(400, MANAGEMENT_ERROR_CODES.DEPT_NAME_REQUIRED, 'Department name is required')
   }
 
   const dept = await deptRepository.create({
@@ -64,10 +68,7 @@ export async function updateManagedDept({ actor, deptId, body = {} }) {
   })
 
   if (!dept) {
-    throw createResponseError(404, {
-      success: false,
-      error: { code: MANAGEMENT_ERROR_CODES.NOT_FOUND, message: 'Department not found' }
-    })
+    throwManagementError(404, MANAGEMENT_ERROR_CODES.DEPT_NOT_FOUND, 'Department not found')
   }
 
   await recordAudit({
@@ -86,18 +87,12 @@ export async function deleteManagedDept({ actor, deptId }) {
 
   const dept = await deptRepository.findById(deptId)
   if (!dept) {
-    throw createResponseError(404, {
-      success: false,
-      error: { code: MANAGEMENT_ERROR_CODES.NOT_FOUND, message: 'Department not found' }
-    })
+    throwManagementError(404, MANAGEMENT_ERROR_CODES.DEPT_NOT_FOUND, 'Department not found')
   }
 
   const childCount = await deptRepository.countChildren(deptId)
   if (childCount > 0) {
-    throw createResponseError(409, {
-      success: false,
-      error: { code: MANAGEMENT_ERROR_CODES.DEPT_HAS_CHILDREN, message: 'Delete child departments first' }
-    })
+    throwManagementError(409, MANAGEMENT_ERROR_CODES.DEPT_HAS_CHILDREN, 'Delete child departments first')
   }
 
   const userCount = await deptRepository.countUsers(deptId)

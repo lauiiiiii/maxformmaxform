@@ -9,6 +9,10 @@ const userRepository = {
     return User.findByUsername(username)
   },
 
+  async findByEmail(email) {
+    return User.findByEmail(email)
+  },
+
   async findByIdentity(identity) {
     if (/^\d+$/.test(String(identity))) {
       const user = await User.findById(identity)
@@ -28,6 +32,14 @@ const userRepository = {
 
   async updatePassword(id, password) {
     return User.updatePassword(id, password)
+  },
+
+  async updateLastLogin(id) {
+    return User.updateLastLogin(id)
+  },
+
+  async verifyPassword(plaintext, hashed) {
+    return User.verifyPassword(plaintext, hashed)
   },
 
   async list(payload = {}) {

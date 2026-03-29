@@ -64,6 +64,10 @@ test('getSurveyResults returns empty-state statistics for surveys without submis
   assert.deepEqual(result.questionStats, [])
   assert.equal(result.observability.snapshot.currentAccessMode, 'snapshot-rebuild')
   assert.equal(result.observability.snapshot.currentMissReason, 'missing')
+  assert.equal(result.observability.snapshot.record.exists, true)
+  assert.equal(result.observability.snapshot.record.updatedAt, null)
+  assert.equal(result.observability.snapshot.source.answerCount, 0)
+  assert.equal(result.observability.snapshot.source.latestAnswerId, null)
   assert.equal(result.observability.snapshot.hitRate, 0)
   assert.equal(result.observability.baseline.largeSample, false)
   assert.equal(persistedSnapshot?.surveyId, 101)
@@ -210,6 +214,7 @@ test('getSurveyResults tracks snapshot hit rate across rebuild and hit requests'
   assert.equal(cached.observability.snapshot.requests, 2)
   assert.equal(cached.observability.snapshot.hits, 1)
   assert.equal(cached.observability.snapshot.misses, 1)
+  assert.equal(cached.observability.snapshot.record.exists, true)
   assert.equal(cached.observability.snapshot.hitRate, 50)
   assert.equal(cached.totalSubmissions, 3)
 })
@@ -228,7 +233,9 @@ test('getSurveyResults returns the cached snapshot when source state is unchange
     answerCount: 3,
     latestAnswerId: 18,
     latestSubmittedAt: '2026-03-28T12:00:00.000Z',
-    surveyUpdatedAt: '2026-03-28T09:00:00.000Z'
+    surveyUpdatedAt: '2026-03-28T09:00:00.000Z',
+    createdAt: '2026-03-28T12:01:00.000Z',
+    updatedAt: '2026-03-28T12:02:00.000Z'
   })
 
   const result = await getSurveyResults({
@@ -243,6 +250,13 @@ test('getSurveyResults returns the cached snapshot when source state is unchange
   assert.equal(result.total, 3)
   assert.deepEqual(result.questionStats, [])
   assert.equal(result.observability.snapshot.currentAccessMode, 'snapshot-hit')
+  assert.equal(result.observability.snapshot.record.exists, true)
+  assert.equal(result.observability.snapshot.record.createdAt, '2026-03-28T12:01:00.000Z')
+  assert.equal(result.observability.snapshot.record.updatedAt, '2026-03-28T12:02:00.000Z')
+  assert.ok(result.observability.snapshot.record.ageMs >= 0)
+  assert.equal(result.observability.snapshot.record.answerCount, 3)
+  assert.equal(result.observability.snapshot.source.answerCount, 3)
+  assert.equal(result.observability.snapshot.source.surveyUpdatedAt, '2026-03-28T09:00:00.000Z')
   assert.equal(result.observability.snapshot.hitRate, 100)
 })
 
@@ -290,6 +304,10 @@ test('getSurveyResults rebuilds and persists the snapshot when source state is s
   assert.equal(persistedSnapshot?.latestAnswerId, 9)
   assert.equal(result.observability.snapshot.currentAccessMode, 'snapshot-rebuild')
   assert.equal(result.observability.snapshot.currentMissReason, 'stale')
+  assert.equal(result.observability.snapshot.record.exists, true)
+  assert.equal(result.observability.snapshot.record.answerCount, 1)
+  assert.equal(result.observability.snapshot.source.answerCount, 1)
+  assert.equal(result.observability.snapshot.source.latestSubmittedAt, '2026-03-28T12:00:00.000Z')
   assert.equal(result.observability.snapshot.rebuilds, 1)
   assert.ok(result.observability.snapshot.rebuildDurationMs.current >= 0)
 })

@@ -218,6 +218,22 @@ export interface SurveyResultsDTO {
       window: string
       currentAccessMode: 'snapshot-hit' | 'snapshot-rebuild'
       currentMissReason: 'missing' | 'stale' | 'snapshot-read-error' | null
+      record: {
+        exists: boolean
+        createdAt: string | null
+        updatedAt: string | null
+        ageMs: number | null
+        answerCount: number | null
+        latestAnswerId: number | null
+        latestSubmittedAt: string | null
+        surveyUpdatedAt: string | null
+      }
+      source: {
+        answerCount: number
+        latestAnswerId: number | null
+        latestSubmittedAt: string | null
+        surveyUpdatedAt: string | null
+      }
       requests: number
       hits: number
       misses: number

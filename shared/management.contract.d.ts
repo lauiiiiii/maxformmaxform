@@ -95,6 +95,61 @@ export interface PositionDTO {
   updatedAt?: string
 }
 
+export interface FlowDTO {
+  id?: number
+  name: string
+  status?: string
+  description?: string
+  created_at?: string
+  updated_at?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface FlowFormDTO {
+  name: string
+  status?: string
+  description?: string
+}
+
+export interface QuestionBankRepoDTO {
+  id?: number
+  name: string
+  description?: string
+  question_count?: number
+  questionCount?: number
+  created_at?: string
+  updated_at?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface QuestionBankRepoFormDTO {
+  name: string
+  description?: string
+}
+
+export interface QuestionBankQuestionDTO {
+  id?: number
+  repo_id?: number
+  repoId?: number
+  title: string
+  type?: string
+  difficulty?: string
+  score?: number
+  created_at?: string
+  updated_at?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface QuestionBankQuestionFormDTO {
+  title: string
+  type?: string
+  difficulty?: string
+  score?: number
+}
+
 export interface FolderDTO {
   id: number
   creator_id?: number
@@ -155,16 +210,52 @@ export interface AuditListQueryDTO extends PaginationQueryDTO {
 export type UserPageDTO = PaginatedResultDTO<UserDTO>
 export type AuditPageDTO = PaginatedResultDTO<AuditLogDTO>
 
+export const MANAGEMENT_ERROR_PREFIX: 'MGMT'
+
+export const MANAGEMENT_ERROR_FAMILIES: Readonly<{
+  ACCESS: 'MGMT_ACCESS'
+  USER: 'MGMT_USER'
+  ROLE: 'MGMT_ROLE'
+  DEPT: 'MGMT_DEPT'
+  POSITION: 'MGMT_POSITION'
+  FOLDER: 'MGMT_FOLDER'
+  MESSAGE: 'MGMT_MESSAGE'
+  FLOW: 'MGMT_FLOW'
+  QUESTION_BANK_REPO: 'MGMT_QUESTION_BANK_REPO'
+  QUESTION_BANK_QUESTION: 'MGMT_QUESTION_BANK_QUESTION'
+}>
+
 export const MANAGEMENT_ERROR_CODES: Readonly<{
-  NOT_FOUND: 'NOT_FOUND'
-  FORBIDDEN: 'FORBIDDEN'
-  VALIDATION: 'VALIDATION'
-  USER_EXISTS: 'USER_EXISTS'
-  ROLE_EXISTS: 'ROLE_EXISTS'
-  POSITION_EXISTS: 'POSITION_EXISTS'
-  DEPT_HAS_CHILDREN: 'DEPT_HAS_CHILDREN'
-  FOLDER_HAS_CHILDREN: 'FOLDER_HAS_CHILDREN'
-  PARENT_FOLDER_NOT_FOUND: 'PARENT_FOLDER_NOT_FOUND'
+  ACCESS_FORBIDDEN: 'MGMT_ACCESS_FORBIDDEN'
+  USER_NOT_FOUND: 'MGMT_USER_NOT_FOUND'
+  USER_REQUIRED_FIELDS: 'MGMT_USER_REQUIRED_FIELDS'
+  USER_EXISTS: 'MGMT_USER_EXISTS'
+  USER_IMPORT_PAYLOAD_INVALID: 'MGMT_USER_IMPORT_PAYLOAD_INVALID'
+  USER_PASSWORD_REQUIRED: 'MGMT_USER_PASSWORD_REQUIRED'
+  ROLE_NOT_FOUND: 'MGMT_ROLE_NOT_FOUND'
+  ROLE_REQUIRED_FIELDS: 'MGMT_ROLE_REQUIRED_FIELDS'
+  ROLE_EXISTS: 'MGMT_ROLE_EXISTS'
+  DEPT_NAME_REQUIRED: 'MGMT_DEPT_NAME_REQUIRED'
+  DEPT_NOT_FOUND: 'MGMT_DEPT_NOT_FOUND'
+  DEPT_HAS_CHILDREN: 'MGMT_DEPT_HAS_CHILDREN'
+  POSITION_NAME_REQUIRED: 'MGMT_POSITION_NAME_REQUIRED'
+  POSITION_NOT_FOUND: 'MGMT_POSITION_NOT_FOUND'
+  POSITION_EXISTS: 'MGMT_POSITION_EXISTS'
+  FOLDER_NOT_FOUND: 'MGMT_FOLDER_NOT_FOUND'
+  FOLDER_NAME_REQUIRED: 'MGMT_FOLDER_NAME_REQUIRED'
+  FOLDER_PARENT_NOT_FOUND: 'MGMT_FOLDER_PARENT_NOT_FOUND'
+  FOLDER_SELF_PARENT: 'MGMT_FOLDER_SELF_PARENT'
+  FOLDER_HAS_CHILDREN: 'MGMT_FOLDER_HAS_CHILDREN'
+  MESSAGE_NOT_FOUND: 'MGMT_MESSAGE_NOT_FOUND'
+  FLOW_NAME_REQUIRED: 'MGMT_FLOW_NAME_REQUIRED'
+  FLOW_STATUS_REQUIRED: 'MGMT_FLOW_STATUS_REQUIRED'
+  FLOW_STATUS_INVALID: 'MGMT_FLOW_STATUS_INVALID'
+  FLOW_NOT_FOUND: 'MGMT_FLOW_NOT_FOUND'
+  QUESTION_BANK_REPO_NAME_REQUIRED: 'MGMT_QUESTION_BANK_REPO_NAME_REQUIRED'
+  QUESTION_BANK_REPO_NOT_FOUND: 'MGMT_QUESTION_BANK_REPO_NOT_FOUND'
+  QUESTION_BANK_QUESTION_TITLE_REQUIRED: 'MGMT_QUESTION_BANK_QUESTION_TITLE_REQUIRED'
+  QUESTION_BANK_QUESTION_SCORE_INVALID: 'MGMT_QUESTION_BANK_QUESTION_SCORE_INVALID'
+  QUESTION_BANK_QUESTION_NOT_FOUND: 'MGMT_QUESTION_BANK_QUESTION_NOT_FOUND'
 }>
 
 export type ManagementErrorCode = typeof MANAGEMENT_ERROR_CODES[keyof typeof MANAGEMENT_ERROR_CODES]
@@ -196,6 +287,9 @@ export function createUserImportResult(result?: Partial<UserImportResultDTO> | n
 export function createDeptDto(dept?: Partial<DeptDTO> | null): DeptDTO | null
 export function createRoleDto(role?: Partial<RoleDTO> | null): RoleDTO | null
 export function createPositionDto(position?: Partial<PositionDTO> | null): PositionDTO | null
+export function createFlowDto(flow?: Partial<FlowDTO> | null): FlowDTO | null
+export function createQuestionBankRepoDto(repo?: Partial<QuestionBankRepoDTO> | null): QuestionBankRepoDTO | null
+export function createQuestionBankQuestionDto(question?: Partial<QuestionBankQuestionDTO> | null): QuestionBankQuestionDTO | null
 
 export function normalizeFolderParentId(parentId?: number | string | null): number | null | undefined
 export function normalizeFolderListQuery(query?: FolderListQueryDTO): {

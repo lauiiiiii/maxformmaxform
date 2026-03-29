@@ -2,7 +2,9 @@
 
 本文档只对应当前 `backend/` 目录源码。
 
-当前后端不是旧版的 MongoDB / ClickHouse / 适配器架构，而是：
+基于源码状态更新时间：`2026-03-29`
+
+当前后端不是旧版 MongoDB / ClickHouse / 适配器架构，而是：
 
 - `Node.js + Express`
 - `Knex + MySQL`
@@ -24,9 +26,9 @@ npm install
 
 ```env
 DB_HOST=127.0.0.1
-DB_PORT=3306
+DB_PORT=3309
 DB_USER=root
-DB_PASSWORD=
+DB_PASSWORD=123456
 DB_NAME=survey_system
 
 JWT_SECRET=please-change-me
@@ -34,6 +36,7 @@ JWT_EXPIRES_IN=7d
 
 FRONTEND_URL=http://127.0.0.1:63000
 PORT=63002
+UPLOAD_PENDING_TTL_HOURS=24
 ```
 
 生产环境必须显式设置 `JWT_SECRET`。
@@ -49,12 +52,6 @@ cd backend
 npm run db:migrate
 npm run db:seed:dev
 ```
-
-说明：
-
-- `db:migrate`：确保表结构存在并补齐新增字段。
-- `db:seed:dev`：补建开发账号和基础字典，不会重置已有账号密码。
-- `db:seed:init-admin`：单独补建管理员账号。
 
 ### 4. 启动服务
 
@@ -103,12 +100,14 @@ backend/
 ├─ scripts/
 │  ├─ start-dev.js
 │  ├─ start-prod.js
+│  ├─ start-e2e.js
 │  ├─ db-migrate.js
 │  └─ db-seed.js
 ├─ src/
 │  ├─ config/
 │  ├─ constants/
 │  ├─ db/
+│  ├─ http/
 │  ├─ middlewares/
 │  ├─ models/
 │  ├─ policies/
@@ -145,17 +144,35 @@ route
         -> model
 ```
 
-### 其他后台模块
+### 认证与后台管理域
 
-用户、部门、角色、职位、消息、审计等模块当前仍更接近：
+认证与管理域已经不再是早期的 `route -> model` 直接拼装返回：
+
+- 认证：`src/routes/auth.js` -> `src/services/authService.js`
+- 用户：`src/routes/users.js` -> `src/services/userService.js`
+- 角色：`src/routes/roles.js` -> `src/services/roleService.js`
+- 部门：`src/routes/depts.js` -> `src/services/deptService.js`
+- 职位：`src/routes/positions.js` -> `src/services/positionService.js`
+- 文件夹：`src/routes/folders.js` -> `src/services/folderService.js`
+- 消息：`src/routes/messages.js` -> `src/services/messageService.js`
+- 审计：`src/routes/audits.js` -> `src/services/auditService.js`
+
+当前这部分更接近：
 
 ```text
 route
-  -> model
-    -> JSON response
+  -> authRequired
+    -> service
+      -> actor/admin policy
+        -> repository / model
+          -> shared contract DTO
 ```
 
-这不是错误，但意味着当前分层深度在模块间还不完全一致。
+说明：
+
+- 路由层不再总是显式写死 `requireRole('admin')`。
+- 管理员能力逐步下沉到 service 里的 `adminPolicy` / `actorPolicy`。
+- `shared/management.contract.js` 统一后台常用 DTO、分页参数和错误码。
 
 ## 数据模型
 
@@ -165,11 +182,26 @@ route
 - `surveys.settings`：问卷设置
 - `surveys.style`：样式配置
 - `answers.answers_data`：答卷内容
+- `survey_results_snapshots`：结果快照与快照源状态
 - `files`：上传文件、附件、答卷文件绑定
+- `folders`：问卷归档目录
 - `messages`：系统/审计消息
 - `audit_logs`：操作审计
 
 上传文件存放在 `backend/uploads/`，通过 `/uploads/*` 静态暴露。
+
+## 结果统计
+
+`src/services/surveyResultsService.js` 当前提供：
+
+- 提交摘要
+- 近 30 天趋势
+- 地域空态与聚合
+- 设备 / 浏览器 / 操作系统统计
+- 题目级统计
+- 结果快照命中 / miss / rebuild 可观测字段
+
+结果接口为 `GET /api/surveys/:id/results`，需要登录后访问。
 
 ## 共享层协作
 
@@ -177,14 +209,25 @@ route
 
 - `../shared/questionTypeRegistry.js`：题型定义与提交语义
 - `../shared/questionModel.js`：题目统计逻辑
+- `../shared/management.contract.js`：后台 DTO、分页、错误码
 
 后端会复用这层做：
 
 - 题型结构校验
 - 上传题约束校验
 - 结果统计口径统一
+- 后台响应 DTO 归一化
+
+## 当前实现边界
+
+- `/api/auth`、`/api/users`、`/api/roles`、`/api/depts`、`/api/positions`、`/api/folders`、`/api/messages`、`/api/audits` 均已服务化。
+- `/api/surveys/:id/uploads` 支持公开上传题两阶段提交。
+- `shared/management.contract.js` 已新增流程与题库仓库 DTO。
+- 但当前后端还没有对应的流程/题库仓库正式路由，前端相关 API 仍为占位实现。
 
 ## 测试
+
+以下结果均为 `2026-03-29` 实际执行：
 
 后端单测：
 
@@ -192,6 +235,8 @@ route
 cd backend
 npm test
 ```
+
+- `70 / 70` 通过
 
 系统冒烟：
 
@@ -203,16 +248,23 @@ cd frontend
 npm run smoke:system
 ```
 
-说明：
+- 两个入口顺序执行均为 `64 / 64`
+- 两个入口共用 `63102` 与共享测试库，不能并行执行
 
-- 仓库级入口与前端 npm 入口最终都调用根目录 `scripts/system-smoke.mjs`
-- 当前系统冒烟口径已更新到 `64 / 64`
-- 覆盖登录、问卷创建、上传、提交、结果、导出、答卷删除、关闭问卷与回收清理等主链路
-- `runId` 已改为毫秒时间戳 + pid + 随机后缀，可并发执行
+浏览器级 E2E：
+
+```bash
+cd ../frontend
+npm run test:e2e
+```
+
+- `8 / 8` 通过
+- 覆盖管理后台鉴权、Forbidden 跳转、上传题浏览器回归、编辑器建卷发布、公开填写、结果页读取
 
 ## 当前结论
 
 - 后端已经不是“所有逻辑都堆在路由里”的早期状态。
 - 问卷域已形成 `route + policy + service + repository + transaction` 基本分层。
-- 结果统计当前来自 MySQL 中的答卷数据实时聚合，而不是 ClickHouse。
-- 继续演进时，应优先把 `answers.js` 和其他后台模块按问卷域模式进一步收敛。
+- 认证与管理域已进入 `route + service + policy/contract` 阶段。
+- 结果统计当前来自 MySQL 中的答卷数据聚合与快照复用，不再沿用旧分析库叙述。
+- 后续应优先补齐流程/题库仓库真实后端接口，以及继续扩大浏览器回归范围。

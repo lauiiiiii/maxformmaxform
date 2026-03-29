@@ -1,4 +1,5 @@
-import { createHttpError } from '../http/errors.js'
+import { throwManagementError, throwManagementPolicyError } from '../http/managementErrors.js'
+import { getAuthenticatedActorPolicy } from '../policies/actorPolicy.js'
 import messageRepository from '../repositories/messageRepository.js'
 import {
   createMessageDto,
@@ -6,7 +7,12 @@ import {
   normalizeMessageListQuery
 } from '../../../shared/management.contract.js'
 
+function ensureAuthenticated(actor) {
+  throwManagementPolicyError(getAuthenticatedActorPolicy(actor))
+}
+
 export async function listActorMessages({ actor, query = {} }) {
+  ensureAuthenticated(actor)
   const normalized = normalizeMessageListQuery(query)
   const list = await messageRepository.list({
     recipient_id: actor.sub,
@@ -20,9 +26,10 @@ export async function listActorMessages({ actor, query = {} }) {
 }
 
 export async function markActorMessageRead({ actor, messageId }) {
+  ensureAuthenticated(actor)
   const message = await messageRepository.markRead(messageId, actor.sub)
   if (!message) {
-    throw createHttpError(404, MANAGEMENT_ERROR_CODES.NOT_FOUND, 'Message not found')
+    throwManagementError(404, MANAGEMENT_ERROR_CODES.MESSAGE_NOT_FOUND, 'Message not found')
   }
 
   return createMessageDto(message)

@@ -288,7 +288,33 @@ function recordSnapshotPersistError() {
   surveyResultsObservability.persistErrors += 1
 }
 
-function buildSnapshotObservability({ accessMode, missReason, rebuildDurationMs }) {
+function buildSnapshotRecordObservability(snapshot) {
+  const createdAt = snapshot?.createdAt || snapshot?.created_at || null
+  const updatedAt = snapshot?.updatedAt || snapshot?.updated_at || null
+  const updatedTimestamp = toTimestamp(updatedAt)
+
+  return {
+    exists: Boolean(snapshot),
+    createdAt,
+    updatedAt,
+    ageMs: updatedTimestamp == null ? null : Math.max(0, Date.now() - updatedTimestamp),
+    answerCount: snapshot == null ? null : Number(snapshot.answerCount || 0),
+    latestAnswerId: snapshot?.latestAnswerId == null ? null : Number(snapshot.latestAnswerId),
+    latestSubmittedAt: snapshot?.latestSubmittedAt || null,
+    surveyUpdatedAt: snapshot?.surveyUpdatedAt || null
+  }
+}
+
+function buildSnapshotSourceObservability(sourceState) {
+  return {
+    answerCount: Number(sourceState?.answerCount || 0),
+    latestAnswerId: sourceState?.latestAnswerId == null ? null : Number(sourceState.latestAnswerId),
+    latestSubmittedAt: sourceState?.latestSubmittedAt || null,
+    surveyUpdatedAt: sourceState?.surveyUpdatedAt || null
+  }
+}
+
+function buildSnapshotObservability({ accessMode, missReason, rebuildDurationMs, snapshot, sourceState }) {
   const requestCount = surveyResultsObservability.requests
   const rebuildCount = surveyResultsObservability.rebuilds
 
@@ -297,6 +323,8 @@ function buildSnapshotObservability({ accessMode, missReason, rebuildDurationMs 
     window: 'process-lifetime',
     currentAccessMode: accessMode,
     currentMissReason: missReason || null,
+    record: buildSnapshotRecordObservability(snapshot),
+    source: buildSnapshotSourceObservability(sourceState),
     requests: requestCount,
     hits: surveyResultsObservability.hits,
     misses: surveyResultsObservability.misses,
@@ -343,13 +371,13 @@ function buildBaselineObservability({ payload, sourceState, questionCount, acces
   }
 }
 
-function withResultsObservability({ payload, sourceState, questionCount, accessMode, missReason = null, requestDurationMs, rebuildDurationMs = null }) {
+function withResultsObservability({ payload, sourceState, questionCount, accessMode, missReason = null, requestDurationMs, rebuildDurationMs = null, snapshot = null }) {
   const corePayload = stripObservability(payload)
 
   return {
     ...corePayload,
     observability: {
-      snapshot: buildSnapshotObservability({ accessMode, missReason, rebuildDurationMs }),
+      snapshot: buildSnapshotObservability({ accessMode, missReason, rebuildDurationMs, snapshot, sourceState }),
       baseline: buildBaselineObservability({
         payload: corePayload,
         sourceState,
@@ -397,9 +425,11 @@ export async function getSurveyResults({ survey }) {
     survey,
     answerState: await Answer.getAggregateState(survey.id)
   })
+  let observedSnapshot = null
 
   try {
     const snapshot = await SurveyResultsSnapshot.findBySurveyId(survey.id)
+    observedSnapshot = snapshot
     if (isSnapshotFresh(snapshot, sourceState)) {
       recordSnapshotHit()
       return withResultsObservability({
@@ -407,7 +437,8 @@ export async function getSurveyResults({ survey }) {
         sourceState,
         questionCount: normalizedQuestions.length,
         accessMode: 'snapshot-hit',
-        requestDurationMs: performance.now() - requestStartedAt
+        requestDurationMs: performance.now() - requestStartedAt,
+        snapshot
       })
     }
 
@@ -423,7 +454,7 @@ export async function getSurveyResults({ survey }) {
   const payload = buildSurveyResultsPayload({ survey, submissions, normalizedQuestions })
 
   try {
-    await SurveyResultsSnapshot.upsert({
+    observedSnapshot = await SurveyResultsSnapshot.upsert({
       surveyId: survey.id,
       payload,
       ...sourceState
@@ -443,6 +474,7 @@ export async function getSurveyResults({ survey }) {
     accessMode: 'snapshot-rebuild',
     missReason: surveyResultsObservability.lastMissReason,
     requestDurationMs: performance.now() - requestStartedAt,
-    rebuildDurationMs
+    rebuildDurationMs,
+    snapshot: observedSnapshot
   })
 }

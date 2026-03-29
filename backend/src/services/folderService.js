@@ -1,4 +1,5 @@
-import { createHttpError, createResponseError } from '../http/errors.js'
+import { throwManagementError, throwManagementPolicyError } from '../http/managementErrors.js'
+import { getAuthenticatedActorPolicy } from '../policies/actorPolicy.js'
 import folderRepository from '../repositories/folderRepository.js'
 import { createAuditMessage, recordAudit } from './activity.js'
 import {
@@ -20,12 +21,16 @@ function getFolderParentFromBody(body = {}) {
   }
 }
 
+function ensureAuthenticated(actor) {
+  throwManagementPolicyError(getAuthenticatedActorPolicy(actor))
+}
+
 async function ensureParentFolder(parentId, creatorId) {
   if (parentId == null) return null
 
   const parent = await folderRepository.findById(parentId, creatorId)
   if (!parent) {
-    throw createHttpError(404, MANAGEMENT_ERROR_CODES.PARENT_FOLDER_NOT_FOUND, 'Folder parent not found')
+    throwManagementError(404, MANAGEMENT_ERROR_CODES.FOLDER_PARENT_NOT_FOUND, 'Folder parent not found')
   }
 
   return parent
@@ -34,16 +39,14 @@ async function ensureParentFolder(parentId, creatorId) {
 async function getManagedFolderOrThrow(folderId, actor) {
   const folder = await folderRepository.findById(folderId, actor.sub)
   if (!folder) {
-    throw createResponseError(404, {
-      success: false,
-      error: { code: MANAGEMENT_ERROR_CODES.NOT_FOUND, message: 'Folder not found' }
-    })
+    throwManagementError(404, MANAGEMENT_ERROR_CODES.FOLDER_NOT_FOUND, 'Folder not found')
   }
 
   return folder
 }
 
 export async function listManagedFolders({ actor, query = {} }) {
+  ensureAuthenticated(actor)
   const normalized = normalizeFolderListQuery(query)
 
   const list = await folderRepository.list({
@@ -54,19 +57,18 @@ export async function listManagedFolders({ actor, query = {} }) {
 }
 
 export async function listAllManagedFolders({ actor }) {
+  ensureAuthenticated(actor)
   const list = await folderRepository.list({ creator_id: actor.sub })
   return list.map(item => createFolderDto(item))
 }
 
 export async function createManagedFolder({ actor, body = {} }) {
+  ensureAuthenticated(actor)
   const name = String(body.name || '').trim()
   const parent_id = normalizeFolderParentId(body.parentId ?? body.parent_id ?? null)
 
   if (!name) {
-    throw createResponseError(400, {
-      success: false,
-      error: { code: MANAGEMENT_ERROR_CODES.VALIDATION, message: 'Folder name is required' }
-    })
+    throwManagementError(400, MANAGEMENT_ERROR_CODES.FOLDER_NAME_REQUIRED, 'Folder name is required')
   }
 
   await ensureParentFolder(parent_id, actor.sub)
@@ -96,14 +98,12 @@ export async function createManagedFolder({ actor, body = {} }) {
 }
 
 export async function updateManagedFolder({ actor, folderId, body = {} }) {
+  ensureAuthenticated(actor)
   const existing = await getManagedFolderOrThrow(folderId, actor)
   const { hasParent, parentId } = getFolderParentFromBody(body)
 
   if (hasParent && parentId !== null && Number(parentId) === Number(existing.id)) {
-    throw createResponseError(400, {
-      success: false,
-      error: { code: MANAGEMENT_ERROR_CODES.VALIDATION, message: 'Folder cannot be its own parent' }
-    })
+    throwManagementError(400, MANAGEMENT_ERROR_CODES.FOLDER_SELF_PARENT, 'Folder cannot be its own parent')
   }
 
   if (hasParent) {
@@ -112,10 +112,7 @@ export async function updateManagedFolder({ actor, folderId, body = {} }) {
 
   const name = body.name === undefined ? undefined : String(body.name || '').trim()
   if (name !== undefined && !name) {
-    throw createResponseError(400, {
-      success: false,
-      error: { code: MANAGEMENT_ERROR_CODES.VALIDATION, message: 'Folder name is required' }
-    })
+    throwManagementError(400, MANAGEMENT_ERROR_CODES.FOLDER_NAME_REQUIRED, 'Folder name is required')
   }
 
   const folder = await folderRepository.update(existing.id, actor.sub, {
@@ -135,14 +132,12 @@ export async function updateManagedFolder({ actor, folderId, body = {} }) {
 }
 
 export async function deleteManagedFolder({ actor, folderId }) {
+  ensureAuthenticated(actor)
   const existing = await getManagedFolderOrThrow(folderId, actor)
 
   const childCount = await folderRepository.countChildren(existing.id, actor.sub)
   if (childCount > 0) {
-    throw createResponseError(409, {
-      success: false,
-      error: { code: MANAGEMENT_ERROR_CODES.FOLDER_HAS_CHILDREN, message: 'Delete child folders first' }
-    })
+    throwManagementError(409, MANAGEMENT_ERROR_CODES.FOLDER_HAS_CHILDREN, 'Delete child folders first')
   }
 
   const movedSurveys = await folderRepository.moveSurveysToRoot(existing.id, actor.sub)

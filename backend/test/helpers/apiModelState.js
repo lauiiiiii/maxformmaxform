@@ -7,6 +7,9 @@ import Folder from '../../src/models/Folder.js'
 import Answer from '../../src/models/Answer.js'
 import FileModel from '../../src/models/File.js'
 import Position from '../../src/models/Position.js'
+import Flow from '../../src/models/Flow.js'
+import QuestionBankRepo from '../../src/models/QuestionBankRepo.js'
+import QuestionBankQuestion from '../../src/models/QuestionBankQuestion.js'
 import Role from '../../src/models/Role.js'
 import SurveyResultsSnapshot from '../../src/models/SurveyResultsSnapshot.js'
 import { resetSurveyResultsObservability } from '../../src/services/surveyResultsService.js'
@@ -25,11 +28,14 @@ const originalDeptMethods = {
 
 const originalUserMethods = {
   findById: User.findById,
+  findByEmail: User.findByEmail,
   findByUsername: User.findByUsername,
   list: User.list,
   create: User.create,
   update: User.update,
+  updateLastLogin: User.updateLastLogin,
   updatePassword: User.updatePassword,
+  verifyPassword: User.verifyPassword,
   delete: User.delete
 }
 
@@ -102,6 +108,27 @@ const originalPositionMethods = {
   update: Position.update,
   delete: Position.delete
 }
+const originalFlowMethods = {
+  list: Flow.list,
+  findById: Flow.findById,
+  create: Flow.create,
+  update: Flow.update,
+  delete: Flow.delete
+}
+const originalQuestionBankRepoMethods = {
+  list: QuestionBankRepo.list,
+  findById: QuestionBankRepo.findById,
+  create: QuestionBankRepo.create,
+  update: QuestionBankRepo.update,
+  delete: QuestionBankRepo.delete
+}
+const originalQuestionBankQuestionMethods = {
+  findById: QuestionBankQuestion.findById,
+  listByRepoId: QuestionBankQuestion.listByRepoId,
+  create: QuestionBankQuestion.create,
+  delete: QuestionBankQuestion.delete,
+  deleteByRepoId: QuestionBankQuestion.deleteByRepoId
+}
 const originalRoleMethods = {
   list: Role.list,
   findById: Role.findById,
@@ -152,11 +179,14 @@ export function resetApiRouteModelState() {
   Dept.delete = originalDeptMethods.delete
 
   User.findById = originalUserMethods.findById
+  User.findByEmail = originalUserMethods.findByEmail
   User.findByUsername = originalUserMethods.findByUsername
   User.list = originalUserMethods.list
   User.create = originalUserMethods.create
   User.update = originalUserMethods.update
+  User.updateLastLogin = originalUserMethods.updateLastLogin
   User.updatePassword = originalUserMethods.updatePassword
+  User.verifyPassword = originalUserMethods.verifyPassword
   User.delete = originalUserMethods.delete
 
   AuditLog.create = originalAuditMethods.create
@@ -219,6 +249,24 @@ export function resetApiRouteModelState() {
   Position.create = originalPositionMethods.create
   Position.update = originalPositionMethods.update
   Position.delete = originalPositionMethods.delete
+
+  Flow.list = originalFlowMethods.list
+  Flow.findById = originalFlowMethods.findById
+  Flow.create = originalFlowMethods.create
+  Flow.update = originalFlowMethods.update
+  Flow.delete = originalFlowMethods.delete
+
+  QuestionBankRepo.list = originalQuestionBankRepoMethods.list
+  QuestionBankRepo.findById = originalQuestionBankRepoMethods.findById
+  QuestionBankRepo.create = originalQuestionBankRepoMethods.create
+  QuestionBankRepo.update = originalQuestionBankRepoMethods.update
+  QuestionBankRepo.delete = originalQuestionBankRepoMethods.delete
+
+  QuestionBankQuestion.findById = originalQuestionBankQuestionMethods.findById
+  QuestionBankQuestion.listByRepoId = originalQuestionBankQuestionMethods.listByRepoId
+  QuestionBankQuestion.create = originalQuestionBankQuestionMethods.create
+  QuestionBankQuestion.delete = originalQuestionBankQuestionMethods.delete
+  QuestionBankQuestion.deleteByRepoId = originalQuestionBankQuestionMethods.deleteByRepoId
 
   Role.list = originalRoleMethods.list
   Role.findById = originalRoleMethods.findById

@@ -201,6 +201,7 @@
                 <label class="upload-picker" :class="{ disabled: uploadState[String(q.id ?? (idx+1))] || preview || isUploadLimitReached(q, idx) }">
                   <input
                     type="file"
+                    :data-testid="`fill-upload-input-${idx}`"
                     :multiple="getUploadConfig(q).maxFiles > 1"
                     :accept="getUploadConfig(q).accept"
                     :disabled="uploadState[String(q.id ?? (idx+1))] || preview || isUploadLimitReached(q, idx)"
@@ -209,8 +210,8 @@
                   <span>{{ uploadState[String(q.id ?? (idx+1))] ? '上传中...' : getUploadButtonText(q, idx) }}</span>
                 </label>
                 <div class="upload-tip">{{ getUploadHelpText(q) }}</div>
-                <div v-if="uploadErrors[String(q.id ?? (idx+1))]" class="upload-error">{{ uploadErrors[String(q.id ?? (idx+1))] }}</div>
-                <div v-if="getUploadAnswerList(q, idx).length" class="upload-list">
+                <div v-if="uploadErrors[String(q.id ?? (idx+1))]" :data-testid="`fill-upload-error-${idx}`" class="upload-error">{{ uploadErrors[String(q.id ?? (idx+1))] }}</div>
+                <div v-if="getUploadAnswerList(q, idx).length" :data-testid="`fill-upload-list-${idx}`" class="upload-list">
                   <div v-for="(file, fileIndex) in getUploadAnswerList(q, idx)" :key="'up-'+file.id+'-'+fileIndex" class="upload-item">
                     <a class="upload-link" :href="file.url" target="_blank" rel="noopener noreferrer">{{ file.name }}</a>
                     <button v-if="!preview" type="button" class="upload-remove" @click="removeUploadedFile(q, idx, fileIndex)">移除</button>

@@ -1,13 +1,14 @@
-import { createHttpError, createResponseError, throwPolicyError } from '../http/errors.js'
+import { throwManagementError, throwManagementPolicyError } from '../http/managementErrors.js'
 import { getAdminPolicy } from '../policies/adminPolicy.js'
 import roleRepository from '../repositories/roleRepository.js'
 import { createRoleDto, MANAGEMENT_ERROR_CODES } from '../../../shared/management.contract.js'
 
 function ensureAdmin(actor) {
-  throwPolicyError(getAdminPolicy(actor))
+  throwManagementPolicyError(getAdminPolicy(actor))
 }
 
-export async function listManagedRoles() {
+export async function listManagedRoles({ actor }) {
+  ensureAdmin(actor)
   const roles = await roleRepository.list()
   return roles.map(item => createRoleDto(item))
 }
@@ -17,18 +18,12 @@ export async function createManagedRole({ actor, body = {} }) {
 
   const { name, code, permissions, remark } = body
   if (!name || !code) {
-    throw createResponseError(400, {
-      success: false,
-      error: { code: MANAGEMENT_ERROR_CODES.VALIDATION, message: 'Role name and code are required' }
-    })
+    throwManagementError(400, MANAGEMENT_ERROR_CODES.ROLE_REQUIRED_FIELDS, 'Role name and code are required')
   }
 
   const existing = await roleRepository.findByCode(code)
   if (existing) {
-    throw createResponseError(409, {
-      success: false,
-      error: { code: MANAGEMENT_ERROR_CODES.ROLE_EXISTS, message: 'Role code already exists' }
-    })
+    throwManagementError(409, MANAGEMENT_ERROR_CODES.ROLE_EXISTS, 'Role code already exists')
   }
 
   const role = await roleRepository.create({ name, code, permissions, remark })
@@ -45,7 +40,7 @@ export async function updateManagedRole({ actor, roleId, body = {} }) {
   })
 
   if (!role) {
-    throw createHttpError(404, MANAGEMENT_ERROR_CODES.NOT_FOUND, 'Role not found')
+    throwManagementError(404, MANAGEMENT_ERROR_CODES.ROLE_NOT_FOUND, 'Role not found')
   }
 
   return createRoleDto(role)

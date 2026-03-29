@@ -1,10 +1,10 @@
-import { throwPolicyError } from '../http/errors.js'
+import { throwManagementPolicyError } from '../http/managementErrors.js'
 import { getAdminPolicy } from '../policies/adminPolicy.js'
 import auditRepository from '../repositories/auditRepository.js'
 import { createAuditPageResult, normalizeAuditListQuery } from '../../../shared/management.contract.js'
 
 function ensureAdmin(actor) {
-  throwPolicyError(getAdminPolicy(actor))
+  throwManagementPolicyError(getAdminPolicy(actor))
 }
 
 export async function listManagedAudits({ actor, query = {} }) {

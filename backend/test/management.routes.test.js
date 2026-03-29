@@ -1,13 +1,26 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import jwt from 'jsonwebtoken'
+import config from '../src/config/index.js'
 import AuditLog from '../src/models/AuditLog.js'
 import Folder from '../src/models/Folder.js'
 import Message from '../src/models/Message.js'
+import Flow from '../src/models/Flow.js'
+import QuestionBankRepo from '../src/models/QuestionBankRepo.js'
+import QuestionBankQuestion from '../src/models/QuestionBankQuestion.js'
 import Role from '../src/models/Role.js'
 import User from '../src/models/User.js'
 import { registerApiRouteHarness } from './helpers/apiRouteHarness.js'
 
-const { request } = registerApiRouteHarness()
+const { request, requestPublic } = registerApiRouteHarness()
+
+function createToken(payload = {}) {
+  return jwt.sign(
+    { sub: 2, username: 'user', roleCode: 'user', ...payload },
+    config.jwt.secret,
+    { expiresIn: '1h' }
+  )
+}
 
 test('GET /api/audits lists audit records through the service flow', async () => {
   let listPayload = null
@@ -60,6 +73,16 @@ test('GET /api/audits lists audit records through the service flow', async () =>
   })
 })
 
+test('GET /api/audits rejects non-admin actors through the policy flow', async () => {
+  const { response, json } = await requestPublic('/audits', {
+    headers: { Authorization: `Bearer ${createToken()}` }
+  })
+
+  assert.equal(response.status, 403)
+  assert.equal(json.success, false)
+  assert.equal(json.error.code, 'MGMT_ACCESS_FORBIDDEN')
+})
+
 test('GET /api/messages normalizes unread and types filters through the service flow', async () => {
   let listPayload = null
 
@@ -96,7 +119,7 @@ test('POST /api/messages/:id/read returns not found when the message is missing'
 
   assert.equal(response.status, 404)
   assert.equal(json.success, false)
-  assert.equal(json.error.code, 'NOT_FOUND')
+  assert.equal(json.error.code, 'MGMT_MESSAGE_NOT_FOUND')
 })
 
 test('POST /api/folders creates folders through the service flow after parent validation', async () => {
@@ -140,7 +163,7 @@ test('PUT /api/folders/:id rejects assigning a folder as its own parent', async 
 
   assert.equal(response.status, 400)
   assert.equal(json.success, false)
-  assert.equal(json.error.code, 'VALIDATION')
+  assert.equal(json.error.code, 'MGMT_FOLDER_SELF_PARENT')
 })
 
 test('POST /api/roles rejects duplicate role codes through the service flow', async () => {
@@ -153,7 +176,96 @@ test('POST /api/roles rejects duplicate role codes through the service flow', as
 
   assert.equal(response.status, 409)
   assert.equal(json.success, false)
-  assert.equal(json.error.code, 'ROLE_EXISTS')
+  assert.equal(json.error.code, 'MGMT_ROLE_EXISTS')
+})
+
+test('GET /api/flows lists flow records through the service flow', async () => {
+  Flow.list = async () => [
+    { id: 1, name: 'Publish approval', status: 'active', description: 'check', created_at: '2026-03-20T00:00:00.000Z' }
+  ]
+
+  const { response, json } = await request('/flows')
+
+  assert.equal(response.status, 200)
+  assert.equal(json.success, true)
+  assert.deepEqual(json.data, [{
+    id: 1,
+    name: 'Publish approval',
+    status: 'active',
+    description: 'check',
+    created_at: '2026-03-20T00:00:00.000Z',
+    createdAt: '2026-03-20T00:00:00.000Z'
+  }])
+})
+
+test('POST /api/flows rejects invalid flow status', async () => {
+  const { response, json } = await request('/flows', {
+    method: 'POST',
+    body: { name: 'Broken flow', status: 'paused' }
+  })
+
+  assert.equal(response.status, 400)
+  assert.equal(json.success, false)
+  assert.equal(json.error.code, 'MGMT_FLOW_STATUS_INVALID')
+})
+
+test('GET /api/repos lists question bank repos through the service flow', async () => {
+  QuestionBankRepo.list = async () => [
+    {
+      id: 3,
+      name: 'Common bank',
+      description: 'seeded',
+      question_count: 4,
+      created_at: '2026-03-21T00:00:00.000Z',
+      updated_at: '2026-03-22T00:00:00.000Z'
+    }
+  ]
+
+  const { response, json } = await request('/repos')
+
+  assert.equal(response.status, 200)
+  assert.equal(json.success, true)
+  assert.deepEqual(json.data, [{
+    id: 3,
+    name: 'Common bank',
+    description: 'seeded',
+    question_count: 4,
+    questionCount: 4,
+    created_at: '2026-03-21T00:00:00.000Z',
+    updated_at: '2026-03-22T00:00:00.000Z',
+    createdAt: '2026-03-21T00:00:00.000Z',
+    updatedAt: '2026-03-22T00:00:00.000Z'
+  }])
+})
+
+test('POST /api/repos/:id/questions validates repo existence before creating a question', async () => {
+  QuestionBankRepo.findById = async () => null
+
+  const { response, json } = await request('/repos/9/questions', {
+    method: 'POST',
+    body: { title: 'What is your role?' }
+  })
+
+  assert.equal(response.status, 404)
+  assert.equal(json.success, false)
+  assert.equal(json.error.code, 'MGMT_QUESTION_BANK_REPO_NOT_FOUND')
+})
+
+test('DELETE /api/repos/:id/questions/:questionId deletes a nested question through the service flow', async () => {
+  let deletedArgs = null
+
+  QuestionBankRepo.findById = async id => ({ id: Number(id), name: 'Repo 1', question_count: 1 })
+  QuestionBankQuestion.findById = async (id, repoId) => ({ id: Number(id), repo_id: Number(repoId), title: 'Question 1' })
+  QuestionBankQuestion.delete = async (id, repoId) => {
+    deletedArgs = { id: Number(id), repoId: Number(repoId) }
+    return 1
+  }
+
+  const { response, json } = await request('/repos/4/questions/11', { method: 'DELETE' })
+
+  assert.equal(response.status, 200)
+  assert.equal(json.success, true)
+  assert.deepEqual(deletedArgs, { id: 11, repoId: 4 })
 })
 
 test('GET /api/users/:id falls back to username lookup through the service flow', async () => {

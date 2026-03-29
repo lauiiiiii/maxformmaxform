@@ -2,33 +2,33 @@ import { Router } from 'express'
 import { asyncRoute } from '../http/asyncRoute.js'
 import { authRequired } from '../middlewares/auth.js'
 import {
-  createManagedRole,
-  deleteManagedRole,
-  listManagedRoles,
-  updateManagedRole
-} from '../services/roleService.js'
+  createManagedFlow,
+  deleteManagedFlow,
+  listManagedFlows,
+  updateManagedFlow
+} from '../services/flowService.js'
 
 const router = Router()
 
 router.use(authRequired)
 
 router.get('/', asyncRoute(async (req, res) => {
-  const list = await listManagedRoles({ actor: req.user })
+  const list = await listManagedFlows({ actor: req.user })
   res.json({ success: true, data: list })
 }))
 
 router.post('/', asyncRoute(async (req, res) => {
-  const role = await createManagedRole({ actor: req.user, body: req.body })
-  res.json({ success: true, data: role })
+  const flow = await createManagedFlow({ actor: req.user, body: req.body })
+  res.json({ success: true, data: flow })
 }))
 
 router.put('/:id', asyncRoute(async (req, res) => {
-  const role = await updateManagedRole({ actor: req.user, roleId: req.params.id, body: req.body })
-  res.json({ success: true, data: role })
+  const flow = await updateManagedFlow({ actor: req.user, flowId: req.params.id, body: req.body })
+  res.json({ success: true, data: flow })
 }))
 
 router.delete('/:id', asyncRoute(async (req, res) => {
-  await deleteManagedRole({ actor: req.user, roleId: req.params.id })
+  await deleteManagedFlow({ actor: req.user, flowId: req.params.id })
   res.json({ success: true })
 }))
 

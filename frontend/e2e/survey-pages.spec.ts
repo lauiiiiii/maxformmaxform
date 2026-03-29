@@ -27,6 +27,24 @@ async function withAuth(page: import('playwright/test').Page, token: string) {
   }, token)
 }
 
+async function fillWithRetry(locator: import('playwright/test').Locator, value: string, attempts = 5) {
+  let lastError: unknown = null
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      await expect(locator).toBeVisible()
+      await locator.click()
+      await locator.fill(value)
+      await expect(locator).toHaveValue(value)
+      return
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw lastError
+}
+
 async function createSurvey(request: import('playwright/test').APIRequestContext, token: string, payload: Record<string, unknown>) {
   const response = await request.post(`${backendBaseUrl}/api/surveys`, {
     headers: {
@@ -78,9 +96,10 @@ test.describe('Survey Browser E2E', () => {
     const surveyId = Number(page.url().match(/\/surveys\/(\d+)\/edit(?:\?|$)/)?.[1])
 
     await expect(page.getByTestId('editor-survey-title-input')).toHaveValue('Editor E2E Survey')
-    await page.locator('.question-categories .type-item').first().click()
+    await page.waitForTimeout(500)
+    await page.locator('.question-categories .category-compact').first().locator('.type-item').first().click()
     await expect(page.getByTestId('question-editor-0')).toBeVisible()
-    await page.getByTestId('question-title-input-0').fill('Editor Choice Question')
+    await fillWithRetry(page.getByTestId('question-title-input-0'), 'Editor Choice Question')
     await page.getByTestId('editor-publish-button').click()
 
     await page.waitForURL('**/user-dashboard')

@@ -182,6 +182,42 @@ export async function migrate() {
     })
   }
 
+  if (!await knex.schema.hasTable('flows')) {
+    await knex.schema.createTable('flows', t => {
+      t.increments('id').unsigned()
+      t.string('name', 100).notNullable()
+      t.string('status', 20).notNullable().defaultTo('draft')
+      t.text('description').nullable()
+      t.datetime('created_at').defaultTo(knex.fn.now())
+      t.datetime('updated_at').defaultTo(knex.fn.now())
+      t.index('status')
+    })
+  }
+
+  if (!await knex.schema.hasTable('question_bank_repos')) {
+    await knex.schema.createTable('question_bank_repos', t => {
+      t.increments('id').unsigned()
+      t.string('name', 100).notNullable()
+      t.text('description').nullable()
+      t.datetime('created_at').defaultTo(knex.fn.now())
+      t.datetime('updated_at').defaultTo(knex.fn.now())
+    })
+  }
+
+  if (!await knex.schema.hasTable('question_bank_questions')) {
+    await knex.schema.createTable('question_bank_questions', t => {
+      t.increments('id').unsigned()
+      t.integer('repo_id').unsigned().notNullable()
+      t.string('title', 255).notNullable()
+      t.string('type', 50).nullable()
+      t.string('difficulty', 50).nullable()
+      t.decimal('score', 10, 2).nullable()
+      t.datetime('created_at').defaultTo(knex.fn.now())
+      t.datetime('updated_at').defaultTo(knex.fn.now())
+      t.index('repo_id')
+    })
+  }
+
   if (await knex.schema.hasTable('surveys')) {
     if (!await knex.schema.hasColumn('surveys', 'folder_id')) {
       await knex.schema.alterTable('surveys', t => {

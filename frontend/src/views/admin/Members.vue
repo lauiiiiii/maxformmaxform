@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div data-testid="admin-members-page">
     <h3>成员管理</h3>
     <div class="toolbar">
       <el-input v-model="keyword" placeholder="搜索用户名" style="width: 240px" />

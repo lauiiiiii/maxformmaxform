@@ -20,7 +20,7 @@ test('DELETE /api/depts/:id rejects deleting a department with child departments
 
   assert.equal(response.status, 409)
   assert.equal(json.success, false)
-  assert.equal(json.error.code, 'DEPT_HAS_CHILDREN')
+  assert.equal(json.error.code, 'MGMT_DEPT_HAS_CHILDREN')
 })
 
 test('DELETE /api/depts/:id clears member dept assignments before deleting', async () => {
@@ -110,5 +110,5 @@ test('POST /api/positions rejects duplicate codes', async () => {
 
   assert.equal(response.status, 409)
   assert.equal(json.success, false)
-  assert.equal(json.error.code, 'POSITION_EXISTS')
+  assert.equal(json.error.code, 'MGMT_POSITION_EXISTS')
 })

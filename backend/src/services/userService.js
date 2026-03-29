@@ -1,4 +1,4 @@
-import { createResponseError, throwPolicyError } from '../http/errors.js'
+import { throwManagementError, throwManagementPolicyError } from '../http/managementErrors.js'
 import { getAdminPolicy } from '../policies/adminPolicy.js'
 import userRepository from '../repositories/userRepository.js'
 import { createAuditMessage, recordAudit } from './activity.js'
@@ -11,7 +11,7 @@ import {
 } from '../../../shared/management.contract.js'
 
 function ensureAdmin(actor) {
-  throwPolicyError(getAdminPolicy(actor))
+  throwManagementPolicyError(getAdminPolicy(actor))
 }
 
 export async function listManagedUsers({ actor, query = {} }) {
@@ -31,10 +31,7 @@ export async function getManagedUser({ actor, identity }) {
 
   const user = await userRepository.findByIdentity(identity)
   if (!user) {
-    throw createResponseError(404, {
-      success: false,
-      error: { code: MANAGEMENT_ERROR_CODES.NOT_FOUND, message: 'User not found' }
-    })
+    throwManagementError(404, MANAGEMENT_ERROR_CODES.USER_NOT_FOUND, 'User not found')
   }
 
   return createUserDto(userRepository.toSafe(user))
@@ -45,18 +42,12 @@ export async function createManagedUser({ actor, body = {} }) {
 
   const { username, email, password, role_id, dept_id, position_id } = body
   if (!username || !password) {
-    throw createResponseError(400, {
-      success: false,
-      error: { code: MANAGEMENT_ERROR_CODES.VALIDATION, message: 'Username and password are required' }
-    })
+    throwManagementError(400, MANAGEMENT_ERROR_CODES.USER_REQUIRED_FIELDS, 'Username and password are required')
   }
 
   const existing = await userRepository.findByUsername(username)
   if (existing) {
-    throw createResponseError(409, {
-      success: false,
-      error: { code: MANAGEMENT_ERROR_CODES.USER_EXISTS, message: 'Username already exists' }
-    })
+    throwManagementError(409, MANAGEMENT_ERROR_CODES.USER_EXISTS, 'Username already exists')
   }
 
   const user = await userRepository.create({ username, email, password, role_id, dept_id, position_id })
@@ -76,10 +67,7 @@ export async function importManagedUsers({ actor, body = {} }) {
 
   const users = Array.isArray(body.users) ? body.users : null
   if (!users) {
-    throw createResponseError(400, {
-      success: false,
-      error: { code: MANAGEMENT_ERROR_CODES.VALIDATION, message: 'users must be an array' }
-    })
+    throwManagementError(400, MANAGEMENT_ERROR_CODES.USER_IMPORT_PAYLOAD_INVALID, 'users must be an array')
   }
 
   const result = {
@@ -162,10 +150,7 @@ export async function updateManagedUser({ actor, userId, body = {} }) {
   const user = await userRepository.update(userId, { email, is_active, dept_id, role_id, position_id })
 
   if (!user) {
-    throw createResponseError(404, {
-      success: false,
-      error: { code: MANAGEMENT_ERROR_CODES.NOT_FOUND, message: 'User not found' }
-    })
+    throwManagementError(404, MANAGEMENT_ERROR_CODES.USER_NOT_FOUND, 'User not found')
   }
 
   await recordAudit({
@@ -184,10 +169,7 @@ export async function resetManagedUserPassword({ actor, userId, body = {} }) {
 
   const { password } = body
   if (!password) {
-    throw createResponseError(400, {
-      success: false,
-      error: { code: MANAGEMENT_ERROR_CODES.VALIDATION, message: 'Password is required' }
-    })
+    throwManagementError(400, MANAGEMENT_ERROR_CODES.USER_PASSWORD_REQUIRED, 'Password is required')
   }
 
   await userRepository.updatePassword(userId, password)
