@@ -116,7 +116,7 @@
           class="ai-input"
           placeholder="例如：帮我生成一套关于员工满意度的调查问卷"
         ></textarea>
-        <button class="btn btn-primary btn-block" @click="generateByAI">
+        <button class="btn btn-primary btn-block" :disabled="aiGenerating" @click="generateByAI">
           立即生成
         </button>
       </div>
@@ -341,6 +341,7 @@ const {
   buildQuestionBankPayload,
   showAIHelper,
   aiPrompt,
+  aiGenerating,
   generateByAI,
   outlineListEl,
   showOutlineTip,

@@ -100,6 +100,7 @@ interface SurveyEditorContextBoundary {
   importQuestionBankQuestion: (question: QuestionBankQuestionDTO) => EditorCoreState['surveyForm']['questions'][number]
   buildQuestionBankPayload: (questionIndex: number, metadata?: QuestionBankExportMetadata) => QuestionBankQuestionFormDTO | null
   aiPrompt: EditorCoreState['aiPrompt']
+  aiGenerating: EditorCoreState['aiGenerating']
   generateByAI: EditorCoreState['generateByAI']
   outlineListEl: EditorCoreState['outlineListEl']
   showOutlineTip: EditorCoreState['showOutlineTip']
@@ -235,6 +236,7 @@ const questionConfigPanelKeys = [
   'buildQuestionBankPayload',
   'showAIHelper',
   'aiPrompt',
+  'aiGenerating',
   'generateByAI',
   'outlineListEl',
   'showOutlineTip',
@@ -515,6 +517,7 @@ function createSurveyEditorContracts({
       buildQuestionBankPayload: core.buildQuestionBankPayload,
       showAIHelper: core.showAIHelper,
       aiPrompt: core.aiPrompt,
+      aiGenerating: core.aiGenerating,
       generateByAI: core.generateByAI,
       outlineListEl: core.outlineListEl,
       showOutlineTip: core.showOutlineTip,

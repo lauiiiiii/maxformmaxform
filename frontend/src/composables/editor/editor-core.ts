@@ -1,6 +1,7 @@
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getSurvey as getSurveyRaw, getResults as getSurveyDetailStats } from '@/api/surveys'
+import { ElMessage } from 'element-plus'
+import { generateSurveyByAi, getSurvey as getSurveyRaw, getResults as getSurveyDetailStats } from '@/api/surveys'
 import { generateQuestionId as generateQuestionIdUtil } from '@/utils/uid'
 import { mapLegacyTypeToServer, mapServerTypeToLegacy } from '@/mappers/surveyMappers'
 import {
@@ -141,6 +142,8 @@ export function useEditorCore() {
   const showAIHelper = ref(false)
   const showHeaderSettings = ref(false)
   const aiPrompt = ref('')
+  const aiGenerating = ref(false)
+  const aiApplyMode = ref<'append' | 'replace'>('append')
 
   const answerStats = reactive({
     total: 0,
@@ -689,60 +692,83 @@ export function useEditorCore() {
     return importedQuestion
   }
 
-  function generateByAI() {
+  function applyAiImportedSurvey(payload: {
+    title: string
+    description?: string
+    questions: Array<{
+      legacyType: number
+      title: string
+      required: boolean
+      options?: string[]
+      placeholder?: string
+      description?: string
+      validation?: Record<string, unknown>
+    }>
+  }) {
+    const importedQuestions = payload.questions.map(buildAiImportedQuestion)
+    const nextDescription = payload.description || ''
+
+    if (aiApplyMode.value === 'replace') {
+      surveyForm.title = payload.title || surveyForm.title
+      surveyForm.description = nextDescription
+      surveyForm.questions.splice(0, surveyForm.questions.length, ...importedQuestions)
+      editingIndex.value = importedQuestions.length > 0 ? 0 : -1
+    } else {
+      if (!surveyForm.title.trim()) surveyForm.title = payload.title
+      if (!surveyForm.description.trim() && nextDescription) {
+        surveyForm.description = nextDescription
+      }
+      surveyForm.questions.push(...importedQuestions)
+    }
+
+    validateForm()
+    showAIHelper.value = false
+    aiPrompt.value = ''
+
+    return importedQuestions.length
+  }
+
+  async function generateByAI() {
     if (!aiPrompt.value.trim()) {
-      alert('Please enter AI content or JSON first.')
+      ElMessage.warning('请先输入 AI 需求或 JSON')
       return
     }
 
     const parsedAiSurvey = parseAiSurveyInput(aiPrompt.value)
     if (parsedAiSurvey.success) {
-      if (!surveyForm.title.trim()) surveyForm.title = parsedAiSurvey.data.title
-      if (!surveyForm.description.trim() && parsedAiSurvey.data.description) {
-        surveyForm.description = parsedAiSurvey.data.description
-      }
-
-      const importedQuestions = parsedAiSurvey.data.questions.map(buildAiImportedQuestion)
-      surveyForm.questions.push(...importedQuestions)
-      showAIHelper.value = false
-      aiPrompt.value = ''
-      alert(`Imported ${importedQuestions.length} questions from validated AI JSON.`)
+      const importedCount = applyAiImportedSurvey(parsedAiSurvey.data)
+      ElMessage.success(`已从校验通过的 AI JSON 导入 ${importedCount} 道题`)
       return
     }
 
     if (isLikelyAiJsonInput(aiPrompt.value)) {
-      alert(`AI JSON validation failed:\n${formatAiSurveyIssues(parsedAiSurvey.issues)}`)
+      ElMessage.error(`AI JSON 校验失败：\n${formatAiSurveyIssues(parsedAiSurvey.issues)}`)
       return
     }
 
-    surveyForm.questions.push(
-      {
-        id: generateQuestionId(),
-        type: 3,
-        title: '您对我们的整体服务满意度如何？',
-        required: true,
-        hideSystemNumber: areAllNumbersHidden.value,
-        options: ['非常满意', '满意', '一般', '不满意', '非常不满意']
-      },
-      {
-        id: generateQuestionId(),
-        type: 4,
-        title: '您认为我们需要改进的方面有哪些？',
-        required: false,
-        hideSystemNumber: areAllNumbersHidden.value,
-        options: ['服务态度', '响应速度', '产品质量', '价格合理性', '其他']
-      },
-      {
-        id: generateQuestionId(),
-        type: 2,
-        title: '请提出宝贵建议',
-        required: false,
-        hideSystemNumber: areAllNumbersHidden.value
-      }
-    )
-    showAIHelper.value = false
-    aiPrompt.value = ''
-    alert('已生成示例题目，可继续编辑完善。')
+    aiGenerating.value = true
+    try {
+      const generated = await generateSurveyByAi({
+        prompt: aiPrompt.value,
+        context: {
+          title: surveyForm.title,
+          description: surveyForm.description,
+          questions: surveyForm.questions
+            .filter(question => String(question.title || '').trim())
+            .map(question => ({
+              title: String(question.title || '').trim(),
+              type: question.type
+            }))
+        }
+      })
+
+      const importedCount = applyAiImportedSurvey(generated)
+      ElMessage.success(`已通过 AI 生成导入 ${importedCount} 道题`)
+    } catch (error: any) {
+      ElMessage.error(error?.response?.data?.error?.message || error?.message || 'AI 生成失败')
+    } finally {
+      aiGenerating.value = false
+    }
   }
   function duplicateQuestion(index: number) {
     const originalQuestion = surveyForm.questions[index]
@@ -1208,6 +1234,7 @@ export function useEditorCore() {
     showHeaderSettings,
     showAIHelper,
     aiPrompt,
+    aiGenerating,
     editingIndex,
     answerStats,
     categoryExpanded,

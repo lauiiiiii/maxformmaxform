@@ -76,6 +76,101 @@ export async function dryRunSurveyJson(payload: SurveyDryRunPayloadDTO): Promise
   return data.data!
 }
 
+export interface SurveyAiGenerateContextQuestionDTO {
+  title: string
+  type?: string | number
+}
+
+export interface SurveyAiGenerateRequestDTO {
+  prompt: string
+  context?: {
+    title?: string
+    description?: string
+    questions?: SurveyAiGenerateContextQuestionDTO[]
+  }
+}
+
+export interface SurveyAiGeneratedQuestionDTO {
+  legacyType: number
+  title: string
+  required: boolean
+  options?: string[]
+  placeholder?: string
+  description?: string
+  validation?: Record<string, unknown>
+}
+
+export interface SurveyAiProtocolQuestionTypeDTO {
+  type: string
+  label: string
+  legacyType: number
+  requiresOptions: boolean
+  requiresValidation?: boolean
+}
+
+export interface SurveyAiProtocolExampleQuestionDTO {
+  qid: string
+  title: string
+  type: string
+  required: boolean
+  options?: string[]
+  placeholder?: string
+  description?: string
+  validation?: Record<string, unknown>
+}
+
+export interface SurveyAiProtocolDTO {
+  kind: string
+  version: string
+  promptTemplate: {
+    id: string
+    version: string
+    systemTemplate: string
+    userTemplate: string
+    variables: string[]
+  }
+  output: {
+    kind: string
+    version: string
+    format: string
+    requiredTopLevelFields: string[]
+    questionFields: string[]
+  }
+  supportedQuestionTypes: SurveyAiProtocolQuestionTypeDTO[]
+  notes: string[]
+  exampleResponse: {
+    kind: string
+    version: string
+    title: string
+    description: string
+    questions: SurveyAiProtocolExampleQuestionDTO[]
+  }
+}
+
+export interface SurveyAiGenerateResultDTO {
+  kind: string
+  protocolVersion: string
+  promptTemplateVersion: string
+  title: string
+  description: string
+  questions: SurveyAiGeneratedQuestionDTO[]
+  provider: {
+    providerId: string
+    providerLabel: string
+    model: string
+  }
+}
+
+export async function getSurveyAiProtocol(): Promise<SurveyAiProtocolDTO> {
+  const { data } = await http.get<ApiResponse<SurveyAiProtocolDTO>>('/surveys/ai/protocol')
+  return data.data!
+}
+
+export async function generateSurveyByAi(payload: SurveyAiGenerateRequestDTO): Promise<SurveyAiGenerateResultDTO> {
+  const { data } = await http.post<ApiResponse<SurveyAiGenerateResultDTO>>('/surveys/ai/generate', payload)
+  return data.data!
+}
+
 export async function deleteSurvey(id: string | number): Promise<void> {
   await http.delete(`/surveys/${id}`)
 }

@@ -23,6 +23,7 @@ import {
   updateManagedSurvey,
   validateSurveyDraft,
 } from '../services/surveyCommandService.js'
+import { generateSurveyDraftByAi, getSurveyAiProtocol } from '../services/surveyAiService.js'
 import { getManagedSurveyResults } from '../services/surveyResultsService.js'
 import { submitSurveyResponseForRequest, uploadSurveyFileForRequest } from '../services/surveyUploadService.js'
 import { upload } from '../utils/uploadStorage.js'
@@ -84,6 +85,19 @@ router.post('/dry-run', authRequired, asyncRoute(async (req, res) => {
     style: payload?.style
   })
   res.json({ success: true, data: result })
+}))
+
+router.get('/ai/protocol', authRequired, asyncRoute(async (req, res) => {
+  const data = await getSurveyAiProtocol({ actor: req.user })
+  res.json({ success: true, data })
+}))
+
+router.post('/ai/generate', authRequired, asyncRoute(async (req, res) => {
+  const data = await generateSurveyDraftByAi({
+    actor: req.user,
+    body: req.body
+  })
+  res.json({ success: true, data })
 }))
 
 router.get('/share/:code', optionalAuth, asyncRoute(async (req, res) => {
