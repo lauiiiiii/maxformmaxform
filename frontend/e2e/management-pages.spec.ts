@@ -174,20 +174,20 @@ async function listFolders(request: APIRequestContext, token: string) {
 test.describe('Management Coverage Browser E2E', () => {
   test('guest users are redirected to login for management and answer routes', async ({ page }) => {
     const protectedPaths = [
-      '/admin/flows',
-      '/admin/repos',
-      '/admin/messages',
-      '/admin/files',
-      '/surveys/answers',
-      '/user-dashboard'
+      { path: '/admin/flows', redirect: '/admin/flows' },
+      { path: '/admin/messages', redirect: '/admin/messages' },
+      { path: '/admin/files', redirect: '/admin/files' },
+      { path: '/question-banks', redirect: '/user-dashboard?tab=repo' },
+      { path: '/surveys/answers', redirect: '/surveys/answers' },
+      { path: '/user-dashboard', redirect: '/user-dashboard' }
     ]
 
-    for (const path of protectedPaths) {
-      await page.goto(path)
+    for (const entry of protectedPaths) {
+      await page.goto(entry.path)
       await page.waitForURL(/\/login\?redirect=/)
 
       const url = new URL(page.url())
-      expect(decodeURIComponent(url.searchParams.get('redirect') || '')).toBe(path)
+      expect(decodeURIComponent(url.searchParams.get('redirect') || '')).toBe(entry.redirect)
     }
   })
 
@@ -195,7 +195,7 @@ test.describe('Management Coverage Browser E2E', () => {
     const user = await registerUser(request)
     await withAuth(page, user.token)
 
-    for (const path of ['/admin/flows', '/admin/repos', '/admin/messages', '/admin/files']) {
+    for (const path of ['/admin/flows', '/admin/messages', '/admin/files']) {
       await page.goto(path)
       await page.waitForURL('**/403')
       await expect(page.getByTestId('forbidden-page')).toBeVisible()
@@ -238,24 +238,29 @@ test.describe('Management Coverage Browser E2E', () => {
     const optionLabels = ['每天', '每周']
 
     await withAuth(page, admin.token)
-    await page.goto('/admin/repos')
+    await page.goto('/user-dashboard?tab=repo')
 
     await expect(page.getByTestId('admin-repos-page')).toBeVisible()
-    await page.getByTestId('repo-name-input').fill(repoName)
     await page.getByTestId('repo-create-button').click()
+    const repoDialog = page.locator('.el-dialog').filter({ hasText: /新建题库|编辑题库/ }).last()
+    await expect(repoDialog).toBeVisible()
+    await repoDialog.getByTestId('repo-name-input').fill(repoName)
+    await repoDialog.getByRole('button', { name: '保存' }).click()
+    await expect(repoDialog).toBeHidden()
 
     const repoRow = page.locator('.el-table__row', { hasText: repoName }).first()
     await expect(repoRow).toBeVisible()
-    await repoRow.click()
-
-    const drawer = page.getByTestId('repo-questions-drawer')
-    await expect(drawer).toBeVisible()
-    await page.getByTestId('repo-question-title-input').fill(questionTitle)
-    await page.getByTestId('repo-question-stem-input').fill(questionStem)
-    await page.getByTestId('repo-question-options-input').fill(optionLabels.join('\n'))
+    await expect(page.locator('.question-panel .panel-title')).toHaveText(repoName)
     await page.getByTestId('repo-question-add-button').click()
+    const questionDialog = page.locator('.el-dialog').filter({ hasText: /新增题目|编辑题目/ }).last()
+    await expect(questionDialog).toBeVisible()
+    await questionDialog.getByTestId('repo-question-title-input').fill(questionTitle)
+    await questionDialog.getByTestId('repo-question-stem-input').fill(questionStem)
+    await questionDialog.getByTestId('repo-question-options-input').fill(optionLabels.join('\n'))
+    await questionDialog.getByRole('button', { name: '保存' }).click()
+    await expect(questionDialog).toBeHidden()
 
-    const questionRow = page.locator('.el-drawer .el-table__row', { hasText: questionTitle }).first()
+    const questionRow = page.locator('.question-panel .el-table__row', { hasText: questionTitle }).first()
     await expect(questionRow).toBeVisible()
     await expect(questionRow.locator('[data-testid^="repo-question-type-"]')).toHaveText('radio')
     await expect(questionRow.locator('[data-testid^="repo-question-stem-"]')).toContainText(questionStem)
@@ -264,12 +269,15 @@ test.describe('Management Coverage Browser E2E', () => {
     await expect(questionRow.locator('[data-testid^="repo-question-option-preview-"]')).toContainText(optionLabels[1])
 
     await questionRow.locator('[data-testid^="repo-question-delete-button-"]').click()
-    await expect(page.locator('.el-drawer .el-table__row', { hasText: questionTitle })).toHaveCount(0)
-
-    await page.keyboard.press('Escape')
-    await expect(drawer).toBeHidden()
+    const deleteQuestionDialog = page.locator('.el-message-box').filter({ hasText: /删除题目|确认删除题目/ }).last()
+    await expect(deleteQuestionDialog).toBeVisible()
+    await deleteQuestionDialog.locator('.el-button--primary').click()
+    await expect(page.locator('.question-panel .el-table__row', { hasText: questionTitle })).toHaveCount(0)
 
     await repoRow.locator('[data-testid^="repo-delete-button-"]').click()
+    const deleteRepoDialog = page.locator('.el-message-box').filter({ hasText: /删除题库|确认删除题库/ }).last()
+    await expect(deleteRepoDialog).toBeVisible()
+    await deleteRepoDialog.locator('.el-button--primary').click()
     await expect(page.locator('.el-table__row', { hasText: repoName })).toHaveCount(0)
   })
 
@@ -438,7 +446,7 @@ test.describe('Management Coverage Browser E2E', () => {
     await page.goto('/user-dashboard')
     await expect(page.getByTestId('user-dashboard-page')).toBeVisible()
 
-    await page.locator('.sidebar .nav li').nth(2).click()
+    await page.locator('.sidebar .nav li', { hasText: '文件夹' }).click()
     await expect(page.locator('.folder-area')).toBeVisible()
 
     await page.locator('.folder-toolbar .team-btn').first().click()

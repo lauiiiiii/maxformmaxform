@@ -48,7 +48,10 @@ function getSurveyEndTime(survey) {
   return getSurveyEndTimeMeta(survey).value
 }
 
-export function validateSurveyDraft({ title, description, questions, settings, style }) {
+export function validateSurveyDraft(
+  { title, description, questions, settings, style },
+  { allowEmptyQuestions = false } = {}
+) {
   const normalizedQuestions = normalizeSurveyQuestions(questions || [])
   const normalizedSettings = sanitizeWritableSurveySettings(settings)
   const normalizedStyle = sanitizeWritableSurveyStyle(style)
@@ -68,7 +71,8 @@ export function validateSurveyDraft({ title, description, questions, settings, s
     }
   }
 
-  const { error } = validateSurveyQuestions(normalizedQuestions)
+  const shouldValidateQuestions = normalizedQuestions.length > 0 || !allowEmptyQuestions
+  const { error } = shouldValidateQuestions ? validateSurveyQuestions(normalizedQuestions) : { error: null }
   if (error) {
     return {
       valid: false,
@@ -150,8 +154,8 @@ export function normalizeSurveyDryRunPayload(body = {}) {
   return body
 }
 
-function assertValidSurveyDraft(input) {
-  const result = validateSurveyDraft(input)
+function assertValidSurveyDraft(input, options) {
+  const result = validateSurveyDraft(input, options)
   if (!result.valid) {
     throw createHttpError(400, SURVEY_ERROR_CODES.VALIDATION, result.error || 'Survey structure is invalid')
   }
@@ -166,7 +170,7 @@ export async function createSurvey({ actor, title, description, questions, setti
     questions,
     settings,
     style
-  })
+  }, { allowEmptyQuestions: true })
 
   const survey = await surveyRepository.create({
     title: normalized.title,
@@ -195,7 +199,7 @@ export async function updateSurvey({ survey, title, description, questions, sett
     questions: questions === undefined ? survey?.questions : questions,
     settings: settings === undefined ? survey?.settings : settings,
     style: style === undefined ? survey?.style : style
-  })
+  }, { allowEmptyQuestions: true })
 
   const updated = await surveyRepository.update(survey.id, {
     title: title === undefined ? undefined : normalized.title,

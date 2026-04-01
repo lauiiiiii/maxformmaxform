@@ -71,7 +71,7 @@ router.post('/validate', authRequired, asyncRoute(async (req, res) => {
     questions: req.body?.questions,
     settings: req.body?.settings,
     style: req.body?.style
-  })
+  }, { allowEmptyQuestions: true })
   res.json({ success: true, data: result })
 }))
 
@@ -83,7 +83,7 @@ router.post('/dry-run', authRequired, asyncRoute(async (req, res) => {
     questions: payload?.questions,
     settings: payload?.settings,
     style: payload?.style
-  })
+  }, { allowEmptyQuestions: true })
   res.json({ success: true, data: result })
 }))
 

@@ -123,6 +123,7 @@ const originalFlowMethods = {
 }
 const originalManagementAiExecutionMethods = {
   list: ManagementAiExecution.list,
+  listAll: ManagementAiExecution.listAll,
   findByActorAndKey: ManagementAiExecution.findByActorAndKey,
   create: ManagementAiExecution.create,
   update: ManagementAiExecution.update
@@ -138,6 +139,7 @@ const originalQuestionBankQuestionMethods = {
   findById: QuestionBankQuestion.findById,
   listByRepoId: QuestionBankQuestion.listByRepoId,
   create: QuestionBankQuestion.create,
+  update: QuestionBankQuestion.update,
   delete: QuestionBankQuestion.delete,
   deleteByRepoId: QuestionBankQuestion.deleteByRepoId
 }
@@ -325,6 +327,7 @@ export function resetApiRouteModelState() {
 
   ManagementAiExecution.findByActorAndKey = originalManagementAiExecutionMethods.findByActorAndKey
   ManagementAiExecution.list = originalManagementAiExecutionMethods.list
+  ManagementAiExecution.listAll = originalManagementAiExecutionMethods.listAll
   ManagementAiExecution.create = originalManagementAiExecutionMethods.create
   ManagementAiExecution.update = originalManagementAiExecutionMethods.update
 
@@ -337,6 +340,7 @@ export function resetApiRouteModelState() {
   QuestionBankQuestion.findById = originalQuestionBankQuestionMethods.findById
   QuestionBankQuestion.listByRepoId = originalQuestionBankQuestionMethods.listByRepoId
   QuestionBankQuestion.create = originalQuestionBankQuestionMethods.create
+  QuestionBankQuestion.update = originalQuestionBankQuestionMethods.update
   QuestionBankQuestion.delete = originalQuestionBankQuestionMethods.delete
   QuestionBankQuestion.deleteByRepoId = originalQuestionBankQuestionMethods.deleteByRepoId
 

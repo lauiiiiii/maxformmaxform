@@ -24,7 +24,8 @@ import {
   normalizeUserListQuery
 } from '../../../shared/management.contract.js'
 
-function ensureAdmin(actor) {
+function ensureAdmin(actor, options = {}) {
+  if (options.skipAdminCheck) return
   throwManagementPolicyError(getAdminPolicy(actor))
 }
 
@@ -62,8 +63,8 @@ export async function getManagedUser({ actor, identity }) {
   return createUserDto(userRepository.toSafe(user))
 }
 
-export async function createManagedUser({ actor, body = {} }) {
-  ensureAdmin(actor)
+export async function createManagedUser({ actor, body = {} }, options = {}) {
+  ensureAdmin(actor, options)
   body = ensurePlainObjectPayload(body)
 
   return runManagementTransaction(async db => {
@@ -110,10 +111,10 @@ export async function createManagedUser({ actor, body = {} }) {
     }, { db })
 
     return createUserDto(userRepository.toSafe(user))
-  })
+  }, options)
 }
 
-export async function importManagedUsers({ actor, body = {} }) {
+export async function importManagedUsers({ actor, body = {} }, options = {}) {
   ensureAdmin(actor)
   body = ensurePlainObjectPayload(body)
 
@@ -199,13 +200,13 @@ export async function importManagedUsers({ actor, body = {} }) {
         entityId: null
       }
     }, { db })
-  })
+  }, options)
 
   return createUserImportResult(result)
 }
 
-export async function updateManagedUser({ actor, userId, body = {} }) {
-  ensureAdmin(actor)
+export async function updateManagedUser({ actor, userId, body = {} }, options = {}) {
+  ensureAdmin(actor, options)
   body = ensurePlainObjectPayload(body)
 
   return runManagementTransaction(async db => {
@@ -242,11 +243,11 @@ export async function updateManagedUser({ actor, userId, body = {} }) {
     }, { db })
 
     return createUserDto(userRepository.toSafe(user))
-  })
+  }, options)
 }
 
-export async function resetManagedUserPassword({ actor, userId, body = {} }) {
-  ensureAdmin(actor)
+export async function resetManagedUserPassword({ actor, userId, body = {} }, options = {}) {
+  ensureAdmin(actor, options)
   body = ensurePlainObjectPayload(body)
 
   await runManagementTransaction(async db => {
@@ -278,11 +279,11 @@ export async function resetManagedUserPassword({ actor, userId, body = {} }) {
         entityId: user.id
       }
     }, { db })
-  })
+  }, options)
 }
 
-export async function deleteManagedUser({ actor, userId }) {
-  ensureAdmin(actor)
+export async function deleteManagedUser({ actor, userId }, options = {}) {
+  ensureAdmin(actor, options)
 
   await runManagementTransaction(async db => {
     const user = await userRepository.findById(userId, { db })
@@ -307,5 +308,5 @@ export async function deleteManagedUser({ actor, userId }) {
         entityId: user.id
       }
     }, { db })
-  })
+  }, options)
 }

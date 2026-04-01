@@ -2,7 +2,7 @@
 
 本文档只对应当前 `backend/` 目录源码。
 
-基于源码状态更新时间：`2026-03-29`
+基于源码状态更新时间：`2026-04-01`
 
 当前后端不是旧版 MongoDB / ClickHouse / 适配器架构，而是：
 
@@ -227,7 +227,20 @@ route
 
 ## 测试
 
-以下结果均为 `2026-03-29` 实际执行：
+以下结果均为 `2026-04-01` 基于当前工作区实际执行：
+
+仓库根统一入口：
+
+```bash
+cd ..
+npm test
+npm run test:smoke
+npm run test:e2e
+```
+
+- `npm test` = `node scripts/test-suite.mjs quick`
+- `npm run test:smoke` = `node scripts/test-suite.mjs smoke`
+- `npm run test:e2e` = `node scripts/test-suite.mjs e2e`
 
 后端单测：
 
@@ -236,7 +249,7 @@ cd backend
 npm test
 ```
 
-- `80 / 80` 通过
+- `169 / 169` 通过
 
 系统冒烟：
 
@@ -261,7 +274,7 @@ cd ../frontend
 npm run test:e2e
 ```
 
-- `17 / 17` 通过
+- `20 / 20` 通过
 - 覆盖管理后台鉴权、流程/题库仓库、消息中心、文件管理、答卷下载、文件夹工作流、上传题浏览器回归、编辑器建卷发布、公开填写、结果页读取
 
 ## 当前结论

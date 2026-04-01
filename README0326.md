@@ -2,13 +2,13 @@
 
 基于 `Vue 3 + TypeScript + Vite` 与 `Node.js + Express + MySQL` 的前后端分离调查问卷系统，覆盖问卷创建、发布、填写、结果分析，以及后台用户、角色、部门、职位、文件夹、消息、审计等管理能力。
 
-基于源码状态更新时间：`2026-03-29`
+基于源码状态更新时间：`2026-04-01`
 
 ## 当前技术栈
 
 - 前端：Vue 3、TypeScript、Vite、Element Plus、Pinia、Vue Router、Axios、ECharts
 - 后端：Node.js、Express、Knex、MySQL、JWT、bcryptjs、multer、ExcelJS
-- 测试：Node.js `node:test`、系统冒烟脚本、前端构建校验、Playwright 浏览器 E2E
+- 测试：根级 `test-suite` 编排、Node.js `node:test`、双系统冒烟入口、前端构建校验、Playwright 浏览器 E2E
 
 ## 当前能力概览
 
@@ -173,6 +173,18 @@ npm run start:prod
 
 ## 常用脚本
 
+### repo root
+
+- `npm test`
+- `npm run test:backend`
+- `npm run test:frontend`
+- `npm run test:smoke`
+- `npm run test:e2e`
+- `npm run test:all`
+- `node scripts/test-suite.mjs quick`
+- `node scripts/test-suite.mjs smoke`
+- `node scripts/test-suite.mjs full`
+
 ### backend
 
 - `npm run dev`
@@ -180,6 +192,7 @@ npm run start:prod
 - `npm start`
 - `npm run start:prod`
 - `npm test`
+- `npm run test:watch`
 - `npm run db:migrate`
 - `npm run db:seed`
 - `npm run db:seed:dev`
@@ -193,19 +206,23 @@ npm run start:prod
 - `npm run start:prod`
 - `npm run lint`
 - `npm run smoke:system`
+- `npm run test:build`
+- `npm run test:smoke`
 - `npm run test:e2e`
 
 ## 当前验证状态
 
-以下结果均为 `2026-03-29` 实际执行：
+以下结果均为 `2026-04-01` 基于当前工作区实际执行：
 
-- `cmd /c npm test` 于 `backend/` 通过，`80 / 80`
-- `node scripts/system-smoke.mjs` 于仓库根目录通过，`64 / 64`
-- `cmd /c npm run smoke:system` 于 `frontend/` 通过，`64 / 64`
-- 两个 smoke 入口并行执行已实测通过，会各自分配独立端口与独立临时测试库
-- GitHub Actions 已新增 [`CI`](./.github/workflows/ci.yml) 工作流，并将两个 smoke 入口拆成 matrix 并行 job
-- `cmd /c npm run build` 于 `frontend/` 通过
-- `cmd /c npm run test:e2e` 于 `frontend/` 通过，`17 / 17`
+- `node scripts/test-suite.mjs quick` 于仓库根目录通过
+- 后端 `cmd /c npm test` 于 `backend/` 通过，`169 / 169`
+- 前端 `npm run build` 于 `frontend/` 通过，`vue-tsc --noEmit` 与 `vite build` 均通过
+- `node scripts/test-suite.mjs smoke` 于仓库根目录通过，repo-root smoke `64 / 64`、frontend smoke `64 / 64`
+- 两个 smoke 入口继续支持并行运行，会各自分配独立端口与独立临时测试库
+- GitHub Actions 已通过 [`CI`](./.github/workflows/ci.yml) 将两个 smoke 入口拆成 matrix 并行 job
+- `node scripts/test-suite.mjs e2e` 于仓库根目录通过，Playwright 当前为 `20 / 20`
+- `node scripts/test-suite.mjs full` 于仓库根目录通过，可串行完成 backend、build、双 smoke 与 E2E
+- 根级 `package.json` 已补齐 `"type": "module"`，消除了 `shared/*.js` 的 `MODULE_TYPELESS_PACKAGE_JSON` 警告
 
 注意：
 - 未显式设置 `PORT` 时，`scripts/system-smoke.mjs` 会让后端监听 `0` 端口，由操作系统分配空闲端口。
@@ -244,8 +261,9 @@ npm run start:prod
 - `backend/README.md`
 - `docs/API接口说明.md`
 - `docs/开发指南.md`
-- `docs/开发日志-2026-03-29.md`
-- `docs/测试报告-2026-03-29.md`
+- `docs/开发日志-2026-04-01.md`
+- `docs/测试报告-2026-04-01.md`
+- `docs/PR-2026-04-01-测试脚本统一与文档补齐.md`
 - `frontend/src/views/survey/README.md`
 - `docs/题型规范.md`
 

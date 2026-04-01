@@ -11,7 +11,8 @@ import {
 import { recordManagementAction, runManagementTransaction } from './activity.js'
 import { createPositionDto, MANAGEMENT_ERROR_CODES } from '../../../shared/management.contract.js'
 
-function ensureAdmin(actor) {
+function ensureAdmin(actor, options = {}) {
+  if (options.skipAdminCheck) return
   throwManagementPolicyError(getAdminPolicy(actor))
 }
 
@@ -25,8 +26,8 @@ export async function listManagedPositions({ actor }) {
   return positions.map(item => createPositionDto(item))
 }
 
-export async function createManagedPosition({ actor, body = {} }) {
-  ensureAdmin(actor)
+export async function createManagedPosition({ actor, body = {} }, options = {}) {
+  ensureAdmin(actor, options)
   body = ensurePlainObjectPayload(body)
 
   return runManagementTransaction(async db => {
@@ -75,11 +76,11 @@ export async function createManagedPosition({ actor, body = {} }) {
       }
     }, { db })
     return createPositionDto(position)
-  })
+  }, options)
 }
 
-export async function updateManagedPosition({ actor, positionId, body = {} }) {
-  ensureAdmin(actor)
+export async function updateManagedPosition({ actor, positionId, body = {} }, options = {}) {
+  ensureAdmin(actor, options)
   body = ensurePlainObjectPayload(body)
 
   return runManagementTransaction(async db => {
@@ -135,11 +136,11 @@ export async function updateManagedPosition({ actor, positionId, body = {} }) {
       }
     }, { db })
     return createPositionDto(position)
-  })
+  }, options)
 }
 
-export async function deleteManagedPosition({ actor, positionId }) {
-  ensureAdmin(actor)
+export async function deleteManagedPosition({ actor, positionId }, options = {}) {
+  ensureAdmin(actor, options)
 
   await runManagementTransaction(async db => {
     const existing = await positionRepository.findById(positionId, { db })
@@ -164,5 +165,5 @@ export async function deleteManagedPosition({ actor, positionId }) {
         entityId: existing.id
       }
     }, { db })
-  })
+  }, options)
 }

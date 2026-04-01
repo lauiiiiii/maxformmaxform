@@ -1,7 +1,7 @@
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { generateSurveyByAi, getSurvey as getSurveyRaw, getResults as getSurveyDetailStats } from '@/api/surveys'
+import { dryRunSurveyJson, generateSurveyByAi, getSurvey as getSurveyRaw, getResults as getSurveyDetailStats } from '@/api/surveys'
 import { generateQuestionId as generateQuestionIdUtil } from '@/utils/uid'
 import { mapLegacyTypeToServer, mapServerTypeToLegacy } from '@/mappers/surveyMappers'
 import {
@@ -80,6 +80,8 @@ export interface SurveyEditorQuestion {
     correctAnswer?: unknown
   }
   placeholder?: string
+  tags?: string[]
+  aiMeta?: Record<string, unknown>
   [key: string]: unknown
 }
 
@@ -105,6 +107,26 @@ export interface QuestionBankExportMetadata {
   aiMeta?: Record<string, unknown>
 }
 
+interface AiImportedQuestionPayload {
+  legacyType: number
+  title: string
+  required: boolean
+  options?: string[]
+  placeholder?: string
+  description?: string
+  validation?: Record<string, unknown>
+  tags?: string[]
+  aiMeta?: Record<string, unknown>
+}
+
+interface AiImportedSurveyPayload {
+  title: string
+  description?: string
+  questions: AiImportedQuestionPayload[]
+}
+
+const QUESTION_BANK_AI_TAG = 'AI生成'
+
 function isPlainObject(value: unknown): value is Record<string, any> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
@@ -119,6 +141,48 @@ function cloneJsonValue<T>(value: T): T {
     }, {} as Record<string, any>) as T
   }
   return value
+}
+
+function mergeUniqueTextList(...values: Array<Array<unknown> | undefined>): string[] | undefined {
+  const merged = values
+    .flatMap(value => Array.isArray(value) ? value : [])
+    .map(item => String(item || '').trim())
+    .filter(Boolean)
+
+  return merged.length > 0 ? Array.from(new Set(merged)) : undefined
+}
+
+function mergeAiMeta(...values: Array<Record<string, unknown> | undefined>): Record<string, unknown> | undefined {
+  const merged = values.reduce<Record<string, unknown>>((result, value) => {
+    if (!isPlainObject(value)) return result
+    Object.assign(result, cloneJsonValue(value))
+    return result
+  }, {})
+
+  return Object.keys(merged).length > 0 ? merged : undefined
+}
+
+function createAiJsonImportMeta() {
+  return {
+    source: 'survey.ai.json.import',
+    generatedAt: new Date().toISOString(),
+    generatedBy: 'manual-json',
+    reviewStatus: 'draft'
+  }
+}
+
+function withAiQuestionAnnotations(payload: AiImportedSurveyPayload, aiMeta?: Record<string, unknown>): AiImportedSurveyPayload {
+  const normalizedAiMeta = mergeAiMeta(aiMeta)
+  const aiTags = normalizedAiMeta ? [QUESTION_BANK_AI_TAG] : undefined
+
+  return {
+    ...payload,
+    questions: payload.questions.map(question => ({
+      ...question,
+      tags: mergeUniqueTextList(question.tags, aiTags),
+      aiMeta: mergeAiMeta(question.aiMeta, normalizedAiMeta)
+    }))
+  }
 }
 
 export function useEditorCore() {
@@ -420,6 +484,8 @@ export function useEditorCore() {
 
       importedQuestion.id = generateQuestionId()
       importedQuestion.hideSystemNumber = areAllNumbersHidden.value
+      importedQuestion.tags = mergeUniqueTextList(question.tags, question.content?.tags)
+      importedQuestion.aiMeta = mergeAiMeta(question.aiMeta, question.content?.aiMeta)
       return importedQuestion
     }
 
@@ -438,6 +504,8 @@ export function useEditorCore() {
         correctAnswer: cloneJsonValue(question.correctAnswer)
       }
     }
+    importedQuestion.tags = mergeUniqueTextList(question.tags, question.content?.tags)
+    importedQuestion.aiMeta = mergeAiMeta(question.aiMeta, question.content?.aiMeta)
     return importedQuestion
   }
 
@@ -665,15 +733,7 @@ export function useEditorCore() {
     if (editingIndex.value === index) editingIndex.value = index + 1
   }
 
-  function buildAiImportedQuestion(question: {
-    legacyType: number
-    title: string
-    required: boolean
-    options?: string[]
-    placeholder?: string
-    description?: string
-    validation?: Record<string, unknown>
-  }): SurveyEditorQuestion {
+  function buildAiImportedQuestion(question: AiImportedQuestionPayload): SurveyEditorQuestion {
     const importedQuestion = buildLegacyQuestion(question.legacyType)
     importedQuestion.title = question.title
     importedQuestion.required = question.required
@@ -688,36 +748,44 @@ export function useEditorCore() {
       }
     }
     if (question.placeholder) (importedQuestion as any).placeholder = question.placeholder
+    if (Array.isArray(question.tags) && question.tags.length > 0) importedQuestion.tags = mergeUniqueTextList(question.tags)
+    if (question.aiMeta && isPlainObject(question.aiMeta)) importedQuestion.aiMeta = mergeAiMeta(question.aiMeta)
 
     return importedQuestion
   }
 
-  function applyAiImportedSurvey(payload: {
-    title: string
-    description?: string
-    questions: Array<{
-      legacyType: number
-      title: string
-      required: boolean
-      options?: string[]
-      placeholder?: string
-      description?: string
-      validation?: Record<string, unknown>
-    }>
-  }) {
+  function resolveAiImportedSurveyState(payload: AiImportedSurveyPayload) {
     const importedQuestions = payload.questions.map(buildAiImportedQuestion)
     const nextDescription = payload.description || ''
 
     if (aiApplyMode.value === 'replace') {
-      surveyForm.title = payload.title || surveyForm.title
-      surveyForm.description = nextDescription
-      surveyForm.questions.splice(0, surveyForm.questions.length, ...importedQuestions)
+      return {
+        importedQuestions,
+        title: payload.title || surveyForm.title,
+        description: nextDescription,
+        questions: importedQuestions
+      }
+    }
+
+    return {
+      importedQuestions,
+      title: surveyForm.title.trim() ? surveyForm.title : payload.title,
+      description: surveyForm.description.trim() || !nextDescription ? surveyForm.description : nextDescription,
+      questions: [...surveyForm.questions, ...importedQuestions]
+    }
+  }
+
+  function applyAiImportedSurvey(payload: AiImportedSurveyPayload) {
+    const { importedQuestions, title, description, questions } = resolveAiImportedSurveyState(payload)
+
+    if (aiApplyMode.value === 'replace') {
+      surveyForm.title = title
+      surveyForm.description = description
+      surveyForm.questions.splice(0, surveyForm.questions.length, ...questions)
       editingIndex.value = importedQuestions.length > 0 ? 0 : -1
     } else {
-      if (!surveyForm.title.trim()) surveyForm.title = payload.title
-      if (!surveyForm.description.trim() && nextDescription) {
-        surveyForm.description = nextDescription
-      }
+      surveyForm.title = title
+      surveyForm.description = description
       surveyForm.questions.push(...importedQuestions)
     }
 
@@ -728,7 +796,28 @@ export function useEditorCore() {
     return importedQuestions.length
   }
 
-  async function generateByAI() {
+  function getRequestErrorMessage(error: any, fallback: string): string {
+    return error?.response?.data?.error?.message || error?.message || fallback
+  }
+
+  async function validateAiImportedSurvey(payload: AiImportedSurveyPayload) {
+    const nextState = resolveAiImportedSurveyState(payload)
+    const result = await dryRunSurveyJson({
+      survey: buildServerSurveyPayload({
+        title: nextState.title,
+        description: nextState.description,
+        questions: nextState.questions
+      })
+    })
+
+    if (!result.valid) {
+      throw new Error(result.error || 'AI import dry-run validation failed')
+    }
+
+    return result
+  }
+
+  async function generateByAILegacy() {
     if (!aiPrompt.value.trim()) {
       ElMessage.warning('请先输入 AI 需求或 JSON')
       return
@@ -770,6 +859,61 @@ export function useEditorCore() {
       aiGenerating.value = false
     }
   }
+
+  async function generateByAIAutoValidated() {
+    if (!aiPrompt.value.trim()) {
+      ElMessage.warning('请先输入 AI 需求或 JSON')
+      return
+    }
+
+    const parsedAiSurvey = parseAiSurveyInput(aiPrompt.value)
+    if (parsedAiSurvey.success) {
+      const annotatedSurvey = withAiQuestionAnnotations(parsedAiSurvey.data, createAiJsonImportMeta())
+      aiGenerating.value = true
+      try {
+        await validateAiImportedSurvey(annotatedSurvey)
+        const importedCount = applyAiImportedSurvey(annotatedSurvey)
+        ElMessage.success(`AI JSON 已通过 dry-run 校验，并导入 ${importedCount} 道题`)
+      } catch (error: any) {
+        ElMessage.error(getRequestErrorMessage(error, 'AI JSON dry-run 校验失败'))
+      } finally {
+        aiGenerating.value = false
+      }
+      return
+    }
+
+    if (isLikelyAiJsonInput(aiPrompt.value)) {
+      ElMessage.error(`AI JSON 校验失败：\n${formatAiSurveyIssues(parsedAiSurvey.issues)}`)
+      return
+    }
+
+    aiGenerating.value = true
+    try {
+      const generated = await generateSurveyByAi({
+        prompt: aiPrompt.value,
+        context: {
+          title: surveyForm.title,
+          description: surveyForm.description,
+          questions: surveyForm.questions
+            .filter(question => String(question.title || '').trim())
+            .map(question => ({
+              title: String(question.title || '').trim(),
+              type: question.type
+            }))
+        }
+      })
+
+      const annotatedSurvey = withAiQuestionAnnotations(generated, generated.aiMeta)
+      await validateAiImportedSurvey(annotatedSurvey)
+      const importedCount = applyAiImportedSurvey(annotatedSurvey)
+      ElMessage.success(`AI 生成内容已通过 dry-run 校验，并导入 ${importedCount} 道题`)
+    } catch (error: any) {
+      ElMessage.error(getRequestErrorMessage(error, 'AI 生成或 dry-run 校验失败'))
+    } finally {
+      aiGenerating.value = false
+    }
+  }
+
   function duplicateQuestion(index: number) {
     const originalQuestion = surveyForm.questions[index]
     const duplicatedQuestion = {
@@ -869,10 +1013,14 @@ export function useEditorCore() {
     index: number,
     options: {
       includeCrossQuestionLogic?: boolean
+      questionList?: SurveyEditorQuestion[]
     } = {}
   ) {
     const includeCrossQuestionLogic = options.includeCrossQuestionLogic !== false
-    const idToOrder = Object.fromEntries(surveyForm.questions.map((item, questionIndex) => [String(item.id), String(questionIndex + 1)]))
+    const questionList = Array.isArray(options.questionList) && options.questionList.length > 0
+      ? options.questionList
+      : surveyForm.questions
+    const idToOrder = Object.fromEntries(questionList.map((item, questionIndex) => [String(item.id), String(questionIndex + 1)]))
     const base: any = {
       uiType: Number((question as any).uiType ?? question.type),
       type: mapLegacyTypeToServer(question.type),
@@ -946,8 +1094,8 @@ export function useEditorCore() {
           const mappedGroups = optionGroups.map((group: any[]) =>
             (group || []).map((condition: any) => {
               const depLocalId = String(condition.qid)
-              const depIndex = surveyForm.questions.findIndex(item => String(item.id) === depLocalId || String(item.id) === String(condition.qid))
-              const depQuestion = surveyForm.questions[depIndex]
+              const depIndex = questionList.findIndex(item => String(item.id) === depLocalId || String(item.id) === String(condition.qid))
+              const depQuestion = questionList[depIndex]
               let value: any = condition.value
               if (depQuestion && Array.isArray(depQuestion.options) && depQuestion.options.length > 0) {
                 const labelToValue = new Map<string, string>()
@@ -1013,8 +1161,8 @@ export function useEditorCore() {
       const mapped = (question as any).logic.visibleWhen.map((group: any[]) =>
         (group || []).map((condition: any) => {
           const depLocalId = String(condition.qid)
-          const depIndex = surveyForm.questions.findIndex(item => String(item.id) === depLocalId || String(item.id) === String(condition.qid))
-          const depQuestion = surveyForm.questions[depIndex]
+          const depIndex = questionList.findIndex(item => String(item.id) === depLocalId || String(item.id) === String(condition.qid))
+          const depQuestion = questionList[depIndex]
           let value: any = condition.value
           if (depQuestion && Array.isArray(depQuestion.options) && depQuestion.options.length > 0) {
             const labelToValue = new Map<string, string>()
@@ -1052,10 +1200,17 @@ export function useEditorCore() {
       ? Number(question.examConfig.score || 0)
       : NaN
     const hasScore = Number.isFinite(rawScore)
-    const normalizedTags = Array.isArray(metadata.tags) ? metadata.tags.map(item => String(item).trim()).filter(Boolean) : []
+    const normalizedTags = mergeUniqueTextList(
+      question.tags,
+      metadata.tags,
+      question.aiMeta ? [QUESTION_BANK_AI_TAG] : undefined
+    ) || []
     const normalizedKnowledgePoints = Array.isArray(metadata.knowledgePoints) ? metadata.knowledgePoints.map(item => String(item).trim()).filter(Boolean) : []
     const normalizedApplicableScenes = Array.isArray(metadata.applicableScenes) ? metadata.applicableScenes.map(item => String(item).trim()).filter(Boolean) : []
-    const normalizedAiMeta = metadata.aiMeta && isPlainObject(metadata.aiMeta) ? cloneJsonValue(metadata.aiMeta) : undefined
+    const normalizedAiMeta = mergeAiMeta(
+      question.aiMeta,
+      metadata.aiMeta && isPlainObject(metadata.aiMeta) ? metadata.aiMeta : undefined
+    )
     const topLevelOptions = serverQuestionTypeHasOptions(exportedQuestion.type) && Array.isArray(exportedQuestion.options)
       ? exportedQuestion.options.map((option: any) => ({
           label: String(option?.label ?? ''),
@@ -1097,12 +1252,18 @@ export function useEditorCore() {
     }
   }
 
-  function toServerPayload() {
-    const questions = surveyForm.questions.map((question, index) => buildServerQuestionPayload(question, index))
+  function buildServerSurveyPayload(draft: {
+    title: string
+    description: string
+    questions: SurveyEditorQuestion[]
+  }) {
+    const questions = draft.questions.map((question, index) => buildServerQuestionPayload(question, index, {
+      questionList: draft.questions
+    }))
 
     return {
-      title: surveyForm.title,
-      description: surveyForm.description,
+      title: draft.title,
+      description: draft.description,
       questions,
       settings: {
         ...surveyForm.settings,
@@ -1110,6 +1271,14 @@ export function useEditorCore() {
         submitOnce: !surveyForm.settings.allowMultipleSubmissions
       }
     }
+  }
+
+  function toServerPayload() {
+    return buildServerSurveyPayload({
+      title: surveyForm.title,
+      description: surveyForm.description,
+      questions: surveyForm.questions
+    })
   }
 
   onMounted(async () => {
@@ -1290,7 +1459,7 @@ export function useEditorCore() {
     isScoreConfigured,
     moveQuestionUp,
     moveQuestionDown,
-    generateByAI,
+    generateByAI: generateByAIAutoValidated,
     onOutlineDragStart,
     onOutlineDragOver,
     onOutlineDrop,

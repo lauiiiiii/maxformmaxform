@@ -11,7 +11,8 @@ import {
 import { recordManagementAction, runManagementTransaction } from './activity.js'
 import { createDeptDto, MANAGEMENT_ERROR_CODES } from '../../../shared/management.contract.js'
 
-function ensureAdmin(actor) {
+function ensureAdmin(actor, options = {}) {
+  if (options.skipAdminCheck) return
   throwManagementPolicyError(getAdminPolicy(actor))
 }
 
@@ -31,8 +32,8 @@ export async function getManagedDeptTree({ actor }) {
   return tree.map(item => createDeptDto(item))
 }
 
-export async function createManagedDept({ actor, body = {} }) {
-  ensureAdmin(actor)
+export async function createManagedDept({ actor, body = {} }, options = {}) {
+  ensureAdmin(actor, options)
   body = ensurePlainObjectPayload(body)
 
   return runManagementTransaction(async db => {
@@ -66,11 +67,11 @@ export async function createManagedDept({ actor, body = {} }) {
     }, { db })
 
     return createDeptDto(dept)
-  })
+  }, options)
 }
 
-export async function updateManagedDept({ actor, deptId, body = {} }) {
-  ensureAdmin(actor)
+export async function updateManagedDept({ actor, deptId, body = {} }, options = {}) {
+  ensureAdmin(actor, options)
   body = ensurePlainObjectPayload(body)
 
   return runManagementTransaction(async db => {
@@ -108,11 +109,11 @@ export async function updateManagedDept({ actor, deptId, body = {} }) {
     }, { db })
 
     return createDeptDto(dept)
-  })
+  }, options)
 }
 
-export async function deleteManagedDept({ actor, deptId }) {
-  ensureAdmin(actor)
+export async function deleteManagedDept({ actor, deptId }, options = {}) {
+  ensureAdmin(actor, options)
 
   return runManagementTransaction(async db => {
     const dept = await deptRepository.findById(deptId, { db })
@@ -151,5 +152,5 @@ export async function deleteManagedDept({ actor, deptId }) {
     }, { db })
 
     return { clearedUsers: userCount }
-  })
+  }, options)
 }

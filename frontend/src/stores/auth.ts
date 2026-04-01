@@ -60,6 +60,13 @@ export const useAuthStore = defineStore('auth', () => {
     return isAdmin.value || permissions.value.includes(code)
   }
 
+  function hasPermissionPrefix(prefix: string) {
+    if (isAdmin.value) return true
+    const normalized = String(prefix || '').trim()
+    if (!normalized) return false
+    return permissions.value.some(item => String(item || '').startsWith(normalized))
+  }
+
   function logout() {
     clearAuth()
   }
@@ -67,7 +74,7 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     token, user, role,
     isLoggedIn, roleCode, permissions, isAdmin, roleLabel, identityCode, username,
-    hasPermission,
+    hasPermission, hasPermissionPrefix,
     login, register, fetchMe, logout, clearAuth
   }
 })

@@ -6,6 +6,7 @@ declare module 'vue-router' {
   interface RouteMeta {
     requiresAuth?: boolean
     requiresAdmin?: boolean
+    requiresPermissionPrefix?: string | string[]
   }
 }
 
@@ -42,23 +43,28 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/admin',
     component: () => import('@/layouts/AdminLayout.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true },
+    meta: { requiresAuth: true },
     children: [
       { path: '', redirect: '/admin/overview' },
-      { path: 'overview', name: 'AdminOverview', component: () => import('@/views/admin/Dashboard.vue') },
-      { path: 'enterprise', name: 'AdminEnterprise', component: () => import('@/views/admin/Enterprise.vue') },
-      { path: 'members', name: 'AdminMembers', component: () => import('@/views/admin/Members.vue') },
-      { path: 'surveys', name: 'AdminSurveys', component: () => import('@/views/admin/Surveys.vue') },
-      { path: 'repos', name: 'AdminRepos', component: () => import('@/views/admin/Repos.vue') },
-      { path: 'flows', name: 'AdminFlows', component: () => import('@/views/admin/Flows.vue') },
-      { path: 'roles', name: 'AdminRoles', component: () => import('@/views/admin/Roles.vue') },
-      { path: 'depts', name: 'AdminDepts', component: () => import('@/views/admin/Depts.vue') },
-      { path: 'positions', name: 'AdminPositions', component: () => import('@/views/admin/Positions.vue') },
-      { path: 'messages', name: 'AdminMessages', component: () => import('@/views/admin/Messages.vue') },
-      { path: 'approval', name: 'AdminAudits', component: () => import('@/views/admin/Audits.vue') },
-      { path: 'profile', name: 'AdminProfile', component: () => import('@/views/admin/Profile.vue') },
-      { path: 'statistics', name: 'AdminStatistics', component: () => import('@/views/admin/Statistics.vue') },
-      { path: 'config', name: 'AdminConfig', component: () => import('@/views/admin/Config.vue') }
+      { path: 'overview', name: 'AdminOverview', component: () => import('@/views/admin/Dashboard.vue'), meta: { requiresAdmin: true } },
+      { path: 'enterprise', name: 'AdminEnterprise', component: () => import('@/views/admin/Enterprise.vue'), meta: { requiresAdmin: true } },
+      { path: 'members', name: 'AdminMembers', component: () => import('@/views/admin/Members.vue'), meta: { requiresAdmin: true } },
+      { path: 'surveys', name: 'AdminSurveys', component: () => import('@/views/admin/Surveys.vue'), meta: { requiresAdmin: true } },
+      { path: 'repos', redirect: '/user-dashboard?tab=repo', meta: { requiresAdmin: true } },
+      { path: 'flows', name: 'AdminFlows', component: () => import('@/views/admin/Flows.vue'), meta: { requiresAdmin: true } },
+      { path: 'roles', name: 'AdminRoles', component: () => import('@/views/admin/Roles.vue'), meta: { requiresAdmin: true } },
+      { path: 'depts', name: 'AdminDepts', component: () => import('@/views/admin/Depts.vue'), meta: { requiresAdmin: true } },
+      { path: 'positions', name: 'AdminPositions', component: () => import('@/views/admin/Positions.vue'), meta: { requiresAdmin: true } },
+      { path: 'messages', name: 'AdminMessages', component: () => import('@/views/admin/Messages.vue'), meta: { requiresAdmin: true } },
+      { path: 'approval', name: 'AdminAudits', component: () => import('@/views/admin/Audits.vue'), meta: { requiresAdmin: true } },
+      { path: 'profile', name: 'AdminProfile', component: () => import('@/views/admin/Profile.vue'), meta: { requiresAdmin: true } },
+      { path: 'statistics', name: 'AdminStatistics', component: () => import('@/views/admin/Statistics.vue'), meta: { requiresAdmin: true } },
+      {
+        path: 'config',
+        name: 'AdminConfig',
+        component: () => import('@/views/admin/Config.vue'),
+        meta: { requiresPermissionPrefix: 'management_ai.' }
+      }
     ]
   },
   {
@@ -125,6 +131,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/survey/AnswerManagementPage.vue'),
     meta: { requiresAuth: true }
   },
+  {
+    path: '/question-banks',
+    redirect: '/user-dashboard?tab=repo',
+    meta: { requiresAuth: true }
+  },
 
   // --- Misc ---
   {
@@ -164,8 +175,26 @@ router.beforeEach(async (to, _from, next) => {
     return next({ name: 'Login', query: { redirect: to.fullPath } })
   }
 
-  if (to.meta.requiresAdmin && !authStore.isAdmin) {
+  if (to.path === '/admin' && !authStore.isAdmin && authStore.hasPermissionPrefix('management_ai.')) {
+    return next({ name: 'AdminConfig' })
+  }
+
+  const requiresAdmin = to.matched.some(record => record.meta?.requiresAdmin)
+  if (requiresAdmin && !authStore.isAdmin) {
     return next({ name: 'Forbidden' })
+  }
+
+  const permissionPrefixes = to.matched.flatMap(record => {
+    const value = record.meta?.requiresPermissionPrefix
+    if (!value) return []
+    return Array.isArray(value) ? value : [value]
+  })
+
+  if (permissionPrefixes.length > 0) {
+    const hasPrefixPermission = permissionPrefixes.some(prefix => authStore.hasPermissionPrefix(prefix))
+    if (!hasPrefixPermission) {
+      return next({ name: 'Forbidden' })
+    }
   }
 
   // Desktop/mobile survey auto-routing

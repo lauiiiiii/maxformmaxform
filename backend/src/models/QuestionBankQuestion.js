@@ -30,6 +30,31 @@ function toDto(row) {
   }
 }
 
+function normalizeQuestionMatches(item, filters = {}) {
+  const keyword = String(filters.keyword || '').trim().toLowerCase()
+  const type = String(filters.type || '').trim().toLowerCase()
+  const content = item?.content && typeof item.content === 'object' ? item.content : {}
+  const tags = Array.isArray(content.tags) ? content.tags.map(tag => String(tag).toLowerCase()) : []
+
+  if (keyword) {
+    const haystack = [
+      item?.title,
+      item?.type,
+      item?.difficulty,
+      content.stem,
+      content.analysis,
+      ...tags
+    ]
+      .map(value => String(value || '').toLowerCase())
+      .join(' ')
+
+    if (!haystack.includes(keyword)) return false
+  }
+
+  if (type && String(item?.type || content.questionType || '').trim().toLowerCase() !== type) return false
+  return true
+}
+
 const QuestionBankQuestion = {
   async findById(id, repoId, options = {}) {
     const db = getDb(options)
@@ -44,7 +69,9 @@ const QuestionBankQuestion = {
     const rows = await db(TABLE)
       .where('repo_id', repoId)
       .orderBy('id', 'asc')
-    return rows.map(toDto)
+    return rows
+      .map(toDto)
+      .filter(item => normalizeQuestionMatches(item, options))
   },
 
   async create({ repo_id, title, type = null, difficulty = null, score = null, content = null }, options = {}) {
@@ -59,6 +86,22 @@ const QuestionBankQuestion = {
       updated_at: db.fn.now()
     })
     return QuestionBankQuestion.findById(id, repo_id, options)
+  },
+
+  async update(id, repoId, fields, options = {}) {
+    const db = getDb(options)
+    const data = {}
+    if (fields.title !== undefined) data.title = fields.title
+    if (fields.type !== undefined) data.type = fields.type
+    if (fields.difficulty !== undefined) data.difficulty = fields.difficulty
+    if (fields.score !== undefined) data.score = fields.score
+    if (fields.content !== undefined) data.content = fields.content ? JSON.stringify(fields.content) : null
+    data.updated_at = db.fn.now()
+
+    let query = db(TABLE).where('id', id)
+    if (repoId !== undefined) query = query.andWhere('repo_id', repoId)
+    await query.update(data)
+    return QuestionBankQuestion.findById(id, repoId, options)
   },
 
   async delete(id, repoId, options = {}) {

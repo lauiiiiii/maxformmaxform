@@ -148,7 +148,7 @@ export async function getManagedSystemConfig({ actor }) {
   return createSystemConfigDto(row)
 }
 
-export async function updateManagedSystemConfig({ actor, body = {} }) {
+export async function updateManagedSystemConfig({ actor, body = {} }, options = {}) {
   ensureAdmin(actor)
   const row = await systemConfigRepository.findByKey(AI_PROVIDER_CONFIG_KEY)
   const existing = createProviderRuntimeConfig(row?.configValue || {})
@@ -184,7 +184,7 @@ export async function updateManagedSystemConfig({ actor, body = {} }) {
     }, { db })
 
     return createSystemConfigDto(row)
-  })
+  }, options)
 }
 
 export async function testManagedSystemConfigConnection({ actor, body = {} }) {

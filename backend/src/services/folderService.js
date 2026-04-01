@@ -83,7 +83,7 @@ export async function listAllManagedFolders({ actor }) {
   return list.map(item => createFolderDto(item))
 }
 
-export async function createManagedFolder({ actor, body = {} }) {
+export async function createManagedFolder({ actor, body = {} }, options = {}) {
   ensureAuthenticated(actor)
   body = ensurePlainObjectPayload(body)
   return runManagementTransaction(async db => {
@@ -122,10 +122,10 @@ export async function createManagedFolder({ actor, body = {} }) {
     }, { db })
 
     return createFolderDto(folder)
-  })
+  }, options)
 }
 
-export async function updateManagedFolder({ actor, folderId, body = {} }) {
+export async function updateManagedFolder({ actor, folderId, body = {} }, options = {}) {
   ensureAuthenticated(actor)
   body = ensurePlainObjectPayload(body)
   return runManagementTransaction(async db => {
@@ -171,10 +171,10 @@ export async function updateManagedFolder({ actor, folderId, body = {} }) {
     }, { db })
 
     return createFolderDto(folder)
-  })
+  }, options)
 }
 
-export async function deleteManagedFolder({ actor, folderId }) {
+export async function deleteManagedFolder({ actor, folderId }, options = {}) {
   ensureAuthenticated(actor)
   return runManagementTransaction(async db => {
     const existing = await getManagedFolderOrThrow(folderId, actor, { db })
@@ -206,5 +206,5 @@ export async function deleteManagedFolder({ actor, folderId }) {
     }, { db })
 
     return { movedSurveys }
-  })
+  }, options)
 }

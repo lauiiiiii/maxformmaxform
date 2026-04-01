@@ -9,13 +9,21 @@
           </div>
           <div class="header-actions">
             <el-button :loading="loadingProtocol" @click="loadProtocol">刷新协议</el-button>
-            <el-button type="primary" :disabled="!protocol" @click="fillExample">填充示例</el-button>
+            <el-button type="primary" :disabled="!canFillExample" @click="fillExample()">填充示例</el-button>
+            <el-button :disabled="!canFillBatchExample" @click="fillBatchExample">批量示例</el-button>
           </div>
         </div>
       </template>
 
       <div class="layout">
-        <section class="panel panel-full">
+        <section v-if="showScopedModeNotice" class="panel panel-full">
+          <div class="scope-notice">
+            当前角色已进入动作级权限模式，仅开放 AI 管理协议和动作执行入口。
+            <span>系统配置与执行账本仍保留管理员可见。</span>
+          </div>
+        </section>
+
+        <section v-if="canManageSystemConfig" class="panel panel-full">
           <div class="panel-head">
             <div>
               <div class="panel-title">AI Key 识别</div>
@@ -215,11 +223,46 @@
           <el-skeleton :loading="loadingProtocol" animated :rows="6">
             <template #default>
               <div v-if="protocol" class="protocol-meta">
-                <el-tag type="danger">Admin Only</el-tag>
+                <el-tag :type="canManageSystemConfig ? 'danger' : 'warning'">
+                  {{ canManageSystemConfig ? 'Admin + Action Scope' : 'Action Scope' }}
+                </el-tag>
                 <el-tag>{{ protocol.version }}</el-tag>
                 <span class="meta-line">kind: {{ protocol.kind }}</span>
                 <span class="meta-line">actions: {{ protocol.actions.length }}</span>
+                <span class="meta-line">auth: {{ protocol.boundaries.auth }}</span>
                 <span class="meta-line">idempotency: {{ protocol.boundaries.idempotency }}</span>
+              </div>
+              <div v-if="protocol" class="protocol-action-summary">
+                <span>当前角色可执行 {{ accessibleProtocolActions.length }} / {{ protocol.actions.length }} 个动作</span>
+                <el-tag v-if="hiddenProtocolActionCount" size="small" type="warning" effect="light">
+                  已隐藏 {{ hiddenProtocolActionCount }} 个受限动作
+                </el-tag>
+              </div>
+              <div v-if="visibleProtocolActions.length" class="protocol-action-grid">
+                <article
+                  v-for="definition in visibleProtocolActions"
+                  :key="definition.action"
+                  class="protocol-action-card"
+                >
+                  <div class="protocol-action-head">
+                    <div>
+                      <div class="protocol-action-label">{{ definition.label }}</div>
+                      <div class="protocol-action-name">{{ definition.action }}</div>
+                    </div>
+                    <el-tag size="small" type="success" effect="light">可执行</el-tag>
+                  </div>
+                  <div class="protocol-action-meta">
+                    <span>权限: {{ formatActionPermissions(definition) }}</span>
+                    <span v-if="definition.payloadField">payload: {{ definition.payloadField }}</span>
+                    <span v-if="definition.targetKeys?.length">target: {{ definition.targetKeys.join(', ') }}</span>
+                  </div>
+                  <div class="protocol-action-actions">
+                    <el-button size="small" @click="fillExample(definition)">填充动作</el-button>
+                  </div>
+                </article>
+              </div>
+              <div v-else-if="protocol" class="protocol-empty">
+                当前角色没有可执行的 management action，请检查角色权限配置。
               </div>
               <ul v-if="protocol?.notes?.length" class="note-list">
                 <li v-for="note in protocol.notes" :key="note">{{ note }}</li>
@@ -243,7 +286,8 @@
               <span class="hint-text">执行失败记录回填时会自动重置幂等键。</span>
             </div>
             <div class="action-row-right">
-              <el-button @click="fillExample" :disabled="!protocol">示例</el-button>
+              <el-button @click="fillExample()" :disabled="!canFillExample">示例</el-button>
+              <el-button @click="fillBatchExample" :disabled="!canFillBatchExample">批量</el-button>
               <el-button type="primary" :loading="running" @click="submitAction">提交</el-button>
             </div>
           </div>
@@ -251,7 +295,7 @@
           <pre class="json-box result-box">{{ resultText }}</pre>
         </section>
 
-        <section class="panel panel-full">
+        <section v-if="canViewExecutionLedger" class="panel panel-full">
           <div class="ledger-header">
             <div>
               <div class="panel-title ledger-title">执行账本</div>
@@ -283,6 +327,43 @@
               clearable
               @keyup.enter="applyExecutionFilters"
             />
+            <el-input
+              v-model="executionQuery.batch_id"
+              placeholder="Batch ID"
+              clearable
+              @keyup.enter="applyExecutionFilters"
+            />
+            <el-input
+              v-model="executionQuery.parent_execution_id"
+              placeholder="Parent Execution ID"
+              clearable
+              @keyup.enter="applyExecutionFilters"
+            />
+            <el-input
+              v-model="executionQuery.step_id"
+              placeholder="Step ID"
+              clearable
+              @keyup.enter="applyExecutionFilters"
+            />
+            <el-select v-model="executionQuery.error_stage" placeholder="Error Stage" clearable>
+              <el-option label="validation" value="validation" />
+              <el-option label="policy" value="policy" />
+              <el-option label="idempotency" value="idempotency" />
+              <el-option label="execution" value="execution" />
+              <el-option label="system" value="system" />
+            </el-select>
+            <el-select v-model="executionQuery.error_class" placeholder="Error Class" clearable>
+              <el-option label="user_fixable" value="user_fixable" />
+              <el-option label="permission_denied" value="permission_denied" />
+              <el-option label="manual_intervention_required" value="manual_intervention_required" />
+              <el-option label="target_not_found" value="target_not_found" />
+              <el-option label="dependency_conflict" value="dependency_conflict" />
+              <el-option label="service_exception" value="service_exception" />
+            </el-select>
+            <el-select v-model="executionQuery.retryable" placeholder="Retryable" clearable>
+              <el-option label="Yes" value="true" />
+              <el-option label="No" value="false" />
+            </el-select>
             <el-date-picker
               v-model="executionQuery.created_from"
               type="datetime"
@@ -313,10 +394,19 @@
           >
             <el-table-column prop="id" label="ID" width="90" />
             <el-table-column prop="actorId" label="Actor" width="100" />
+            <el-table-column prop="batchId" label="Batch" min-width="180" />
+            <el-table-column prop="stepId" label="Step" width="140" />
             <el-table-column prop="action" label="Action" min-width="180" />
             <el-table-column prop="status" label="状态" width="120">
               <template #default="{ row }">
                 <el-tag :type="statusTagType(row.status)" effect="light">{{ row.status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="errorStage" label="Stage" width="130" />
+            <el-table-column prop="errorClass" label="Class" min-width="180" />
+            <el-table-column label="Retryable" width="110">
+              <template #default="{ row }">
+                {{ formatRetryable(row.retryable) }}
               </template>
             </el-table-column>
             <el-table-column prop="idempotencyKey" label="幂等键" min-width="220" />
@@ -326,7 +416,7 @@
                 {{ formatDateTime(row.createdAt) }}
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="180" fixed="right">
+            <el-table-column label="操作" width="220" fixed="right">
               <template #default="{ row }">
                 <div class="table-actions">
                   <el-button link type="primary" @click="openExecutionDetail(row)">查看</el-button>
@@ -336,7 +426,7 @@
                     type="danger"
                     @click="backfillExecution(row)"
                   >
-                    回填
+                    {{ backfillActionLabel(row) }}
                   </el-button>
                 </div>
               </template>
@@ -364,23 +454,111 @@
         <div class="detail-grid">
           <div class="detail-item"><strong>ID:</strong> {{ selectedExecution.id }}</div>
           <div class="detail-item"><strong>Actor:</strong> {{ selectedExecution.actorId ?? '-' }}</div>
+          <div class="detail-item"><strong>Batch:</strong> {{ selectedExecution.batchId || '-' }}</div>
+          <div class="detail-item"><strong>Parent Execution:</strong> {{ selectedExecution.parentExecutionId ?? '-' }}</div>
+          <div class="detail-item"><strong>Step:</strong> {{ selectedExecution.stepId || '-' }}</div>
+          <div class="detail-item"><strong>Step Index:</strong> {{ selectedExecution.stepIndex ?? '-' }}</div>
           <div class="detail-item"><strong>Action:</strong> {{ selectedExecution.action }}</div>
           <div class="detail-item"><strong>Status:</strong> {{ selectedExecution.status }}</div>
           <div class="detail-item"><strong>Idempotency:</strong> {{ selectedExecution.idempotencyKey }}</div>
           <div class="detail-item"><strong>Created:</strong> {{ formatDateTime(selectedExecution.createdAt) }}</div>
           <div class="detail-item"><strong>Error Code:</strong> {{ selectedExecution.errorCode || '-' }}</div>
+          <div class="detail-item"><strong>Error Stage:</strong> {{ selectedExecution.errorStage || '-' }}</div>
+          <div class="detail-item"><strong>Error Class:</strong> {{ selectedExecution.errorClass || '-' }}</div>
+          <div class="detail-item"><strong>Retryable:</strong> {{ formatRetryable(selectedExecution.retryable) }}</div>
+          <div class="detail-item"><strong>Failed Step:</strong> {{ selectedExecution.failedStepId || '-' }}</div>
+          <div class="detail-item"><strong>Failed Action:</strong> {{ selectedExecution.failedAction || '-' }}</div>
           <div class="detail-item"><strong>Error Message:</strong> {{ selectedExecution.errorMessage || '-' }}</div>
         </div>
 
         <div class="detail-toolbar">
           <el-button
-            v-if="selectedExecution.status === 'failed'"
+            v-if="canBackfillSelectedExecution"
+            plain
+            @click="backfillCurrentExecution(selectedExecution)"
+          >
+            回填当前请求
+          </el-button>
+          <el-button
+            v-if="canBackfillSelectedParentExecution"
             type="danger"
             plain
-            @click="backfillExecution(selectedExecution)"
+            @click="backfillParentExecution(selectedExecution)"
           >
-            回填失败请求到编辑器
+            回填父批次请求
           </el-button>
+        </div>
+
+        <div v-if="showExecutionTree" class="detail-section">
+          <div class="detail-section-head">
+            <div class="panel-title">批量步骤树</div>
+            <span v-if="executionTreeSummary" class="detail-section-meta">{{ executionTreeSummary }}</span>
+          </div>
+
+          <div v-loading="loadingExecutionTree" class="execution-tree-panel">
+            <div v-if="executionTreeError" class="execution-tree-empty">
+              {{ executionTreeError }}
+            </div>
+            <el-tree
+              v-else-if="selectedExecutionTreeNodes.length"
+              class="execution-tree"
+              :data="selectedExecutionTreeNodes"
+              node-key="nodeKey"
+              default-expand-all
+              highlight-current
+              :expand-on-click-node="false"
+              :current-node-key="String(selectedExecution.id)"
+              @node-click="handleExecutionTreeNodeClick"
+            >
+              <template #default="{ data }">
+                <div
+                  class="execution-tree-node"
+                  :class="{ active: Number(data.row.id) === Number(selectedExecution?.id) }"
+                  :data-testid="`execution-tree-node-${data.row.id}`"
+                >
+                  <div class="execution-tree-node-main">
+                    <div class="execution-tree-node-title-row">
+                      <span class="execution-tree-node-title">{{ data.label }}</span>
+                      <el-tag :type="statusTagType(data.row.status)" effect="light">{{ data.row.status }}</el-tag>
+                      <el-tag v-if="data.row.retryable != null" effect="plain" :type="data.row.retryable ? 'warning' : 'info'">
+                        Retryable {{ formatRetryable(data.row.retryable) }}
+                      </el-tag>
+                    </div>
+                    <div class="execution-tree-node-meta">{{ data.meta }}</div>
+                  </div>
+                  <div class="execution-tree-node-actions">
+                    <el-button
+                      v-if="data.row.status === 'failed' && canBackfillExecution(data.row)"
+                      link
+                      type="primary"
+                      @click.stop="backfillCurrentExecution(data.row)"
+                    >
+                      回填当前请求
+                    </el-button>
+                    <el-button
+                      v-if="canBackfillParentExecution(data.row)"
+                      link
+                      type="danger"
+                      @click.stop="backfillParentExecution(data.row)"
+                    >
+                      回填父请求
+                    </el-button>
+                  </div>
+                </div>
+              </template>
+            </el-tree>
+            <div v-else class="execution-tree-empty">
+              当前记录不是批量执行，暂无树形步骤视图。
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-if="selectedExecutionParentRequest && Number(selectedExecutionParentRequest.id) !== Number(selectedExecution.id)"
+          class="detail-section"
+        >
+          <div class="panel-title">父批次请求</div>
+          <pre class="json-box detail-box">{{ selectedExecutionParentRequestText }}</pre>
         </div>
 
         <div class="detail-section">
@@ -399,6 +577,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useAuthStore } from '@/stores/auth'
 import {
   exportManagementAiExecutions,
   getManagementAiProtocol,
@@ -416,6 +595,8 @@ import {
 } from '@/api/systemConfig'
 import type {
   ManagementActionEnvelopeDTO,
+  ManagementActionDefinitionDTO,
+  ManagementBatchEnvelopeDTO,
   ManagementActionProtocolDTO,
   ManagementAiExecutionDTO
 } from '../../../../shared/management.contract.js'
@@ -452,6 +633,19 @@ interface AiKeyRecognitionResult {
   provider?: AiProviderDefinition
   candidates?: AiProviderDefinition[]
 }
+
+type ManagementAiRequestEnvelopeDTO = ManagementActionEnvelopeDTO | ManagementBatchEnvelopeDTO
+
+interface ExecutionTreeNode {
+  nodeKey: string
+  label: string
+  meta: string
+  row: ManagementAiExecutionDTO
+  children: ExecutionTreeNode[]
+}
+
+const MANAGEMENT_BATCH_ACTION = 'management.batch'
+const MANAGEMENT_AI_PERMISSION_PREFIX = 'management_ai.'
 
 function getLobeIcon(name: string) {
   return `https://raw.githubusercontent.com/lobehub/lobe-icons/master/packages/static-svg/dark/${name}.svg`
@@ -778,6 +972,7 @@ function createEmptyProviderForm(): AiProviderConfigDTO {
   }
 }
 
+const authStore = useAuthStore()
 const protocol = ref<ManagementActionProtocolDTO | null>(null)
 const loadingProtocol = ref(false)
 const running = ref(false)
@@ -805,19 +1000,86 @@ const executionPage = ref(1)
 const executionPageSize = ref(10)
 const selectedExecution = ref<ManagementAiExecutionDTO | null>(null)
 const detailVisible = ref(false)
+const loadingExecutionTree = ref(false)
+const executionTreeRows = ref<ManagementAiExecutionDTO[]>([])
+const executionTreeKey = ref('')
+const executionTreeError = ref('')
 const editorPanelRef = ref<HTMLElement | null>(null)
 const executionQuery = ref({
   action: '',
   status: '',
   actor_id: '',
+  batch_id: '',
+  parent_execution_id: '',
+  step_id: '',
+  error_stage: '',
+  error_class: '',
+  retryable: '',
   created_from: '',
   created_to: ''
 })
 
-const protocolText = computed(() => formatJson(protocol.value, ''))
+const accessibleProtocolActions = computed(() => {
+  return (protocol.value?.actions || []).filter(definition => canAccessActionDefinition(definition))
+})
+const visibleProtocolActions = computed(() => {
+  if (canManageSystemConfig.value) {
+    return protocol.value?.actions || []
+  }
+  return accessibleProtocolActions.value
+})
+const hiddenProtocolActionCount = computed(() => {
+  const total = protocol.value?.actions?.length || 0
+  return Math.max(0, total - visibleProtocolActions.value.length)
+})
+const protocolBatchPreview = computed(() => {
+  return buildBatchPayloadFromDefinitions(visibleProtocolActions.value, {
+    dryRun: true,
+    idempotencyKey: 'management-batch-example',
+    batchId: 'management-batch-example'
+  })
+})
+const visibleProtocol = computed<ManagementActionProtocolDTO | null>(() => {
+  if (!protocol.value) return null
+  return {
+    ...protocol.value,
+    actions: visibleProtocolActions.value,
+    batch: protocolBatchPreview.value || createEmptyBatchPreview()
+  }
+})
+const protocolText = computed(() => formatJson(visibleProtocol.value, ''))
 const resultText = computed(() => formatJson(result.value, '暂无结果'))
 const executionRequestText = computed(() => formatJson(selectedExecution.value?.requestPayload ?? null, '暂无请求数据'))
 const executionResponseText = computed(() => formatJson(selectedExecution.value?.responsePayload ?? null, '暂无响应数据'))
+const canAccessManagementAi = computed(() => authStore.isAdmin || authStore.hasPermissionPrefix(MANAGEMENT_AI_PERMISSION_PREFIX))
+const canManageSystemConfig = computed(() => authStore.isAdmin)
+const canViewExecutionLedger = computed(() => authStore.isAdmin)
+const canFillExample = computed(() => accessibleProtocolActions.value.length > 0)
+const canFillBatchExample = computed(() => Boolean(buildBatchPayloadFromDefinitions(accessibleProtocolActions.value, {
+  dryRun: dryRun.value,
+  idempotencyKey: 'management-batch-preview',
+  batchId: 'management-batch-preview'
+})))
+const showScopedModeNotice = computed(() => canAccessManagementAi.value && (!canManageSystemConfig.value || !canViewExecutionLedger.value))
+const selectedExecutionBatchRoot = computed(() => getBatchRootExecution(selectedExecution.value, executionTreeRows.value))
+const selectedExecutionParentRequest = computed(() => getBackfillParentExecution(selectedExecution.value, executionTreeRows.value))
+const selectedExecutionParentRequestText = computed(() => formatJson(selectedExecutionParentRequest.value?.requestPayload ?? null, '暂无父请求数据'))
+const selectedExecutionTreeNodes = computed(() => buildExecutionTreeNodes(executionTreeRows.value))
+const showExecutionTree = computed(() => Boolean(selectedExecution.value?.batchId || executionTreeRows.value.length || loadingExecutionTree.value || executionTreeError.value))
+const executionTreeSummary = computed(() => {
+  const root = selectedExecutionBatchRoot.value
+  if (!root) return ''
+
+  const stepRows = executionTreeRows.value.filter(item => Number(item.parentExecutionId) === Number(root.id))
+  const completed = stepRows.filter(item => item.status === 'completed').length
+  const failed = stepRows.filter(item => item.status === 'failed').length
+  const skipped = stepRows.filter(item => item.status === 'skipped').length
+  const batchLabel = root.batchId || root.idempotencyKey || `#${root.id}`
+
+  return `批次 ${batchLabel}，共 ${stepRows.length} 步，完成 ${completed}，失败 ${failed}，跳过 ${skipped}`
+})
+const canBackfillSelectedExecution = computed(() => Boolean(selectedExecution.value?.status === 'failed' && canBackfillExecution(selectedExecution.value)))
+const canBackfillSelectedParentExecution = computed(() => canBackfillParentExecution(selectedExecution.value, executionTreeRows.value))
 const hasExecutionFilters = computed(() => Object.values(executionQuery.value).some(Boolean))
 const executionPageCount = computed(() => Math.max(1, Math.ceil(executionTotal.value / executionPageSize.value)))
 const aiKeyRecognition = computed(() => recognizeAiKey(aiKeyInput.value, aiApiBaseInput.value))
@@ -878,6 +1140,298 @@ function statusTagType(status?: string) {
   return 'warning'
 }
 
+function formatRetryable(value?: boolean | null) {
+  if (value == null) return '-'
+  return value ? 'Yes' : 'No'
+}
+
+function canAccessActionDefinition(definition?: ManagementActionDefinitionDTO | null) {
+  if (!definition) return false
+  return definition.requiredPermissions.every(permission => authStore.hasPermission(permission))
+}
+
+function formatActionPermissions(definition?: ManagementActionDefinitionDTO | null) {
+  if (!definition?.requiredPermissions?.length) return '无需附加权限'
+  return definition.requiredPermissions.join(', ')
+}
+
+function cloneActionExample(definition?: ManagementActionDefinitionDTO | null) {
+  if (!definition?.example) return null
+  return JSON.parse(JSON.stringify(definition.example)) as ManagementActionEnvelopeDTO
+}
+
+function buildActionPayloadFromDefinition(
+  definition?: ManagementActionDefinitionDTO | null,
+  options: { dryRun: boolean; idempotencyKey?: string } = { dryRun: true }
+) {
+  const example = cloneActionExample(definition)
+  if (!example) return null
+
+  const nextPayload: ManagementActionEnvelopeDTO = {
+    ...example,
+    dryRun: options.dryRun
+  }
+
+  if (options.idempotencyKey) {
+    nextPayload.idempotencyKey = options.idempotencyKey
+  } else {
+    delete nextPayload.idempotencyKey
+  }
+
+  return nextPayload
+}
+
+function createEmptyBatchPreview(): ManagementBatchEnvelopeDTO {
+  return {
+    kind: MANAGEMENT_BATCH_ACTION,
+    version: protocol.value?.batch?.version || protocol.value?.version,
+    dryRun: true,
+    idempotencyKey: 'management-batch-example',
+    batchId: 'management-batch-example',
+    mode: protocol.value?.batch?.mode || 'serial',
+    continueOnError: protocol.value?.batch?.continueOnError ?? false,
+    reason: protocol.value?.batch?.reason,
+    meta: protocol.value?.batch?.meta ? JSON.parse(JSON.stringify(protocol.value.batch.meta)) : undefined,
+    actions: []
+  }
+}
+
+function buildBatchPayloadFromDefinitions(
+  definitions: ManagementActionDefinitionDTO[],
+  options: { dryRun: boolean; idempotencyKey: string; batchId?: string }
+) {
+  const steps = definitions
+    .filter(definition => canAccessActionDefinition(definition))
+    .slice(0, 3)
+    .map((definition, index) => {
+      const action = buildActionPayloadFromDefinition(definition, { dryRun: options.dryRun })
+      if (!action) return null
+      return {
+        stepId: `step-${index + 1}`,
+        action
+      }
+    })
+    .filter((step): step is NonNullable<typeof step> => Boolean(step))
+
+  if (!steps.length) return null
+
+  return {
+    kind: MANAGEMENT_BATCH_ACTION,
+    version: protocol.value?.batch?.version || protocol.value?.version,
+    dryRun: options.dryRun,
+    idempotencyKey: options.idempotencyKey,
+    batchId: options.batchId || options.idempotencyKey,
+    mode: protocol.value?.batch?.mode || 'serial',
+    continueOnError: protocol.value?.batch?.continueOnError ?? false,
+    reason: protocol.value?.batch?.reason,
+    meta: protocol.value?.batch?.meta ? JSON.parse(JSON.stringify(protocol.value.batch.meta)) : undefined,
+    actions: steps
+  } satisfies ManagementBatchEnvelopeDTO
+}
+
+function isBatchExecution(row?: ManagementAiExecutionDTO | null) {
+  if (!row) return false
+  if (row.action === MANAGEMENT_BATCH_ACTION) return true
+  if (row.requestPayload && typeof row.requestPayload === 'object' && row.requestPayload.kind === MANAGEMENT_BATCH_ACTION) {
+    return true
+  }
+  return false
+}
+
+function compareExecutionRows(a: ManagementAiExecutionDTO, b: ManagementAiExecutionDTO) {
+  const aLevel = a.parentExecutionId == null ? 0 : 1
+  const bLevel = b.parentExecutionId == null ? 0 : 1
+  if (aLevel !== bLevel) return aLevel - bLevel
+
+  const aStep = a.stepIndex ?? Number.MAX_SAFE_INTEGER
+  const bStep = b.stepIndex ?? Number.MAX_SAFE_INTEGER
+  if (aStep !== bStep) return aStep - bStep
+
+  return Number(a.id) - Number(b.id)
+}
+
+function sortExecutionRows(rows: ManagementAiExecutionDTO[]) {
+  return [...rows].sort(compareExecutionRows)
+}
+
+function clearExecutionTree() {
+  executionTreeRows.value = []
+  executionTreeKey.value = ''
+  executionTreeError.value = ''
+}
+
+function getExecutionTreeKey(row?: ManagementAiExecutionDTO | null) {
+  if (!row) return ''
+  if (row.batchId) return `batch:${row.batchId}`
+  if (row.parentExecutionId != null) return `parent:${row.parentExecutionId}`
+  if (isBatchExecution(row)) return `execution:${row.id}`
+  return ''
+}
+
+function getBatchRootExecution(
+  row?: ManagementAiExecutionDTO | null,
+  rows: ManagementAiExecutionDTO[] = executionTreeRows.value
+) {
+  if (!row) return null
+  if (isBatchExecution(row) && row.parentExecutionId == null) {
+    return rows.find(item => Number(item.id) === Number(row.id)) || row
+  }
+  if (row.parentExecutionId != null) {
+    return rows.find(item => Number(item.id) === Number(row.parentExecutionId)) || null
+  }
+  if (row.batchId) {
+    return rows.find(item => item.batchId === row.batchId && item.parentExecutionId == null && isBatchExecution(item)) || null
+  }
+  return null
+}
+
+function canBackfillExecution(row?: ManagementAiExecutionDTO | null) {
+  return Boolean(cloneActionEnvelope(row?.requestPayload))
+}
+
+function canBackfillParentExecution(
+  row?: ManagementAiExecutionDTO | null,
+  rows: ManagementAiExecutionDTO[] = executionTreeRows.value
+) {
+  if (!row || row.status !== 'failed') return false
+  const parent = getBackfillParentExecution(row, rows)
+  return Boolean(parent && Number(parent.id) !== Number(row.id))
+}
+
+function getBackfillParentExecution(
+  row?: ManagementAiExecutionDTO | null,
+  rows: ManagementAiExecutionDTO[] = executionTreeRows.value
+) {
+  const root = getBatchRootExecution(row, rows)
+  if (!root) return null
+  return canBackfillExecution(root) ? root : null
+}
+
+function buildExecutionNodeLabel(row: ManagementAiExecutionDTO) {
+  if (isBatchExecution(row)) {
+    return row.batchId ? `批次 ${row.batchId}` : `批次执行 #${row.id}`
+  }
+
+  if (row.stepIndex != null) {
+    return row.stepId ? `步骤 ${row.stepIndex} · ${row.stepId}` : `步骤 ${row.stepIndex}`
+  }
+
+  return row.stepId ? `步骤 ${row.stepId}` : `执行 #${row.id}`
+}
+
+function buildExecutionNodeMeta(row: ManagementAiExecutionDTO) {
+  const meta = [`#${row.id}`, row.action]
+  if (row.errorMessage) meta.push(row.errorMessage)
+  return meta.filter(Boolean).join(' · ')
+}
+
+function buildExecutionTreeNodes(rows: ManagementAiExecutionDTO[]): ExecutionTreeNode[] {
+  if (!rows.length) return []
+
+  const sortedRows = sortExecutionRows(rows)
+  const nodeMap = new Map<number, ExecutionTreeNode>()
+
+  for (const row of sortedRows) {
+    nodeMap.set(Number(row.id), {
+      nodeKey: String(row.id),
+      label: buildExecutionNodeLabel(row),
+      meta: buildExecutionNodeMeta(row),
+      row,
+      children: []
+    })
+  }
+
+  const roots: ExecutionTreeNode[] = []
+
+  for (const row of sortedRows) {
+    const current = nodeMap.get(Number(row.id))
+    if (!current) continue
+
+    if (row.parentExecutionId != null) {
+      const parent = nodeMap.get(Number(row.parentExecutionId))
+      if (parent) {
+        parent.children.push(current)
+        continue
+      }
+    }
+
+    roots.push(current)
+  }
+
+  return roots
+}
+
+async function fetchExecutionTreeRows(batchId: string) {
+  const collected = new Map<number, ManagementAiExecutionDTO>()
+  const pageSize = 200
+  let page = 1
+  let total = 0
+
+  do {
+    const result = await listManagementAiExecutions({
+      page,
+      pageSize,
+      batch_id: batchId
+    })
+
+    total = result.total || 0
+    for (const item of result.list || []) {
+      collected.set(Number(item.id), item)
+    }
+
+    if (!(result.list || []).length) break
+    page += 1
+  } while (collected.size < total)
+
+  return sortExecutionRows([...collected.values()])
+}
+
+async function loadExecutionTree(row?: ManagementAiExecutionDTO | null) {
+  const batchId = normalizeText(row?.batchId)
+  const nextKey = getExecutionTreeKey(row)
+
+  if (!batchId || !nextKey) {
+    clearExecutionTree()
+    return []
+  }
+
+  if (executionTreeKey.value === nextKey && executionTreeRows.value.length) {
+    const matched = executionTreeRows.value.find(item => Number(item.id) === Number(row?.id))
+    if (matched) {
+      selectedExecution.value = matched
+    }
+    return executionTreeRows.value
+  }
+
+  loadingExecutionTree.value = true
+  executionTreeError.value = ''
+
+  try {
+    const rows = await fetchExecutionTreeRows(batchId)
+    executionTreeRows.value = rows
+    executionTreeKey.value = nextKey
+
+    if (!rows.length) {
+      executionTreeError.value = '当前批次暂无步骤记录'
+      return rows
+    }
+
+    const matched = rows.find(item => Number(item.id) === Number(row?.id))
+    if (matched) {
+      selectedExecution.value = matched
+    }
+
+    return rows
+  } catch {
+    clearExecutionTree()
+    executionTreeError.value = '批次步骤加载失败'
+    ElMessage.error('批次步骤加载失败')
+    return []
+  } finally {
+    loadingExecutionTree.value = false
+  }
+}
+
 function syncProviderForm(value?: Partial<AiProviderConfigDTO> | null) {
   aiProviderForm.value = {
     ...createEmptyProviderForm(),
@@ -892,6 +1446,12 @@ function buildExecutionListParams() {
     action: executionQuery.value.action || undefined,
     status: executionQuery.value.status || undefined,
     actor_id: executionQuery.value.actor_id || undefined,
+    batch_id: executionQuery.value.batch_id || undefined,
+    parent_execution_id: executionQuery.value.parent_execution_id || undefined,
+    step_id: executionQuery.value.step_id || undefined,
+    error_stage: executionQuery.value.error_stage || undefined,
+    error_class: executionQuery.value.error_class || undefined,
+    retryable: executionQuery.value.retryable || undefined,
     created_from: executionQuery.value.created_from || undefined,
     created_to: executionQuery.value.created_to || undefined
   }
@@ -903,6 +1463,12 @@ function buildExecutionFilterParams() {
     action: params.action,
     status: params.status,
     actor_id: params.actor_id,
+    batch_id: params.batch_id,
+    parent_execution_id: params.parent_execution_id,
+    step_id: params.step_id,
+    error_stage: params.error_stage,
+    error_class: params.error_class,
+    retryable: params.retryable,
     created_from: params.created_from,
     created_to: params.created_to
   }
@@ -922,9 +1488,21 @@ function createRetryIdempotencyKey(original?: string | null) {
   return `${seed}-retry-${Date.now()}`
 }
 
-function cloneActionEnvelope(value: unknown): ManagementActionEnvelopeDTO | null {
+function applyRetryIdempotency(payload: ManagementAiRequestEnvelopeDTO) {
+  const originalKey = typeof payload.idempotencyKey === 'string' ? payload.idempotencyKey : null
+  const nextKey = createRetryIdempotencyKey(originalKey)
+  payload.idempotencyKey = nextKey
+
+  if (payload.kind === 'management.batch' && (!payload.batchId || payload.batchId === originalKey)) {
+    payload.batchId = nextKey
+  }
+
+  return nextKey
+}
+
+function cloneActionEnvelope(value: unknown): ManagementAiRequestEnvelopeDTO | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  return JSON.parse(JSON.stringify(value)) as ManagementActionEnvelopeDTO
+  return JSON.parse(JSON.stringify(value)) as ManagementAiRequestEnvelopeDTO
 }
 
 async function loadProtocol() {
@@ -937,12 +1515,19 @@ async function loadProtocol() {
 }
 
 async function loadSystemConfig() {
+  if (!canManageSystemConfig.value) return
   const data = await getSystemConfig()
   systemConfig.value = data
   syncProviderForm(data.provider)
 }
 
 async function loadExecutions(options: { resetPage?: boolean } = {}) {
+  if (!canViewExecutionLedger.value) {
+    executionRows.value = []
+    executionTotal.value = 0
+    return
+  }
+
   if (options.resetPage) {
     executionPage.value = 1
   }
@@ -959,18 +1544,34 @@ async function loadExecutions(options: { resetPage?: boolean } = {}) {
   }
 }
 
-function fillExample() {
-  const example = protocol.value?.actions?.[0]?.example
-  if (!example) {
-    ElMessage.warning('当前没有可用示例')
+function fillExample(definition?: ManagementActionDefinitionDTO) {
+  const targetDefinition = definition || accessibleProtocolActions.value[0]
+  const nextPayload = buildActionPayloadFromDefinition(targetDefinition, {
+    dryRun: dryRun.value,
+    idempotencyKey: `admin-${Date.now()}`
+  })
+
+  if (!nextPayload) {
+    ElMessage.warning('当前没有可执行的动作示例')
     return
   }
 
-  const nextPayload: ManagementActionEnvelopeDTO = {
-    ...example,
-    idempotencyKey: example.idempotencyKey || `admin-${Date.now()}`,
-    dryRun: dryRun.value
+  actionText.value = JSON.stringify(nextPayload, null, 2)
+}
+
+function fillBatchExample() {
+  const nextKey = `batch-${Date.now()}`
+  const nextPayload = buildBatchPayloadFromDefinitions(accessibleProtocolActions.value, {
+    dryRun: dryRun.value,
+    idempotencyKey: nextKey,
+    batchId: nextKey
+  })
+
+  if (!nextPayload) {
+    ElMessage.warning('当前没有可执行的批量示例')
+    return
   }
+
   actionText.value = JSON.stringify(nextPayload, null, 2)
 }
 
@@ -1008,6 +1609,7 @@ function handleProviderPresetChange(providerId?: string) {
 }
 
 async function runAiProviderConnectionTest() {
+  if (!canManageSystemConfig.value) return
   testingConfig.value = true
   connectivityResult.value = null
   try {
@@ -1024,6 +1626,7 @@ async function runAiProviderConnectionTest() {
 }
 
 async function saveAiProviderConfig() {
+  if (!canManageSystemConfig.value) return
   if (!normalizeText(aiProviderForm.value.apiKey) && !systemConfig.value.provider.hasApiKey) {
     ElMessage.warning('请先输入要保存的 API Key')
     return
@@ -1044,7 +1647,7 @@ async function saveAiProviderConfig() {
   }
 }
 
-function parseActionText(): ManagementActionEnvelopeDTO | null {
+function parseActionText(): ManagementAiRequestEnvelopeDTO | null {
   const raw = actionText.value.trim()
   if (!raw) {
     ElMessage.warning('请输入管理动作 JSON')
@@ -1052,7 +1655,7 @@ function parseActionText(): ManagementActionEnvelopeDTO | null {
   }
 
   try {
-    const parsed = JSON.parse(raw) as ManagementActionEnvelopeDTO
+    const parsed = JSON.parse(raw) as ManagementAiRequestEnvelopeDTO
     return {
       ...parsed,
       dryRun: dryRun.value
@@ -1077,12 +1680,17 @@ async function submitAction() {
   }
 }
 
-function openExecutionDetail(row: ManagementAiExecutionDTO) {
+async function openExecutionDetail(row: ManagementAiExecutionDTO) {
   selectedExecution.value = row
   detailVisible.value = true
+  await loadExecutionTree(row)
 }
 
-async function backfillExecution(row: ManagementAiExecutionDTO) {
+function handleExecutionTreeNodeClick(node: ExecutionTreeNode) {
+  selectedExecution.value = node.row
+}
+
+async function fillActionEditorFromExecution(row: ManagementAiExecutionDTO, successMessage?: string) {
   const payload = cloneActionEnvelope(row.requestPayload)
   if (!payload) {
     ElMessage.warning('该记录没有可回填的请求体')
@@ -1090,7 +1698,7 @@ async function backfillExecution(row: ManagementAiExecutionDTO) {
   }
 
   if (row.status === 'failed') {
-    payload.idempotencyKey = createRetryIdempotencyKey(payload.idempotencyKey)
+    applyRetryIdempotency(payload)
   }
 
   dryRun.value = Boolean(payload.dryRun)
@@ -1098,10 +1706,46 @@ async function backfillExecution(row: ManagementAiExecutionDTO) {
   detailVisible.value = false
   result.value = null
 
-  ElMessage.success(row.status === 'failed' ? '已回填失败请求，并重置幂等键' : '已回填请求')
+  ElMessage.success(successMessage || (row.status === 'failed' ? '已回填失败请求，并重置幂等键' : '已回填请求'))
 
   await nextTick()
   editorPanelRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+async function backfillCurrentExecution(row: ManagementAiExecutionDTO) {
+  await fillActionEditorFromExecution(row)
+}
+
+async function backfillParentExecution(row: ManagementAiExecutionDTO) {
+  await loadExecutionTree(row)
+  const parent = getBackfillParentExecution(row, executionTreeRows.value)
+  if (!parent) {
+    ElMessage.warning('当前记录未找到可回填的父批次请求')
+    return
+  }
+
+  await fillActionEditorFromExecution(parent, '已回填父批次请求，并重置幂等键')
+}
+
+async function backfillExecution(row: ManagementAiExecutionDTO) {
+  if (canBackfillParentExecution(row, executionTreeRows.value) || row.parentExecutionId != null) {
+    await backfillParentExecution(row)
+    return
+  }
+
+  await backfillCurrentExecution(row)
+}
+
+function backfillActionLabel(row: ManagementAiExecutionDTO) {
+  if (row.status === 'failed' && row.parentExecutionId != null) {
+    return '回填父请求'
+  }
+
+  if (row.status === 'failed' && isBatchExecution(row)) {
+    return '回填批次'
+  }
+
+  return '回填'
 }
 
 async function applyExecutionFilters() {
@@ -1113,6 +1757,12 @@ async function resetExecutionFilters() {
     action: '',
     status: '',
     actor_id: '',
+    batch_id: '',
+    parent_execution_id: '',
+    step_id: '',
+    error_stage: '',
+    error_class: '',
+    retryable: '',
     created_from: '',
     created_to: ''
   }
@@ -1130,6 +1780,7 @@ async function handleExecutionPageSizeChange(nextPageSize: number) {
 }
 
 async function downloadLedger(format: 'json' | 'csv') {
+  if (!canViewExecutionLedger.value) return
   const target = format === 'json' ? exportingJson : exportingCsv
   if (target.value) return
 
@@ -1144,10 +1795,16 @@ async function downloadLedger(format: 'json' | 'csv') {
 }
 
 onMounted(async () => {
-  await loadSystemConfig()
+  if (canManageSystemConfig.value) {
+    await loadSystemConfig()
+  }
   await loadProtocol()
-  fillExample()
-  await loadExecutions()
+  if (canFillExample.value) {
+    fillExample()
+  }
+  if (canViewExecutionLedger.value) {
+    await loadExecutions()
+  }
 })
 </script>
 
@@ -1215,6 +1872,18 @@ onMounted(async () => {
   margin: 4px 0 0;
   color: #64748b;
   font-size: 13px;
+}
+
+.scope-notice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  background: #fffbeb;
+  color: #92400e;
+  line-height: 1.7;
 }
 
 .ai-key-layout {
@@ -1481,6 +2150,76 @@ onMounted(async () => {
   margin-bottom: 12px;
 }
 
+.protocol-action-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.protocol-action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.protocol-action-card {
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.protocol-action-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.protocol-action-label {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.protocol-action-name {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.protocol-action-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.protocol-action-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.protocol-empty {
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .meta-line {
   color: #475569;
   font-size: 13px;
@@ -1591,7 +2330,23 @@ onMounted(async () => {
 }
 
 .detail-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   margin-bottom: 20px;
+}
+
+.detail-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.detail-section-meta {
+  color: #64748b;
+  font-size: 12px;
 }
 
 .detail-section + .detail-section {
@@ -1600,6 +2355,84 @@ onMounted(async () => {
 
 .detail-box {
   min-height: 160px;
+}
+
+.execution-tree-panel {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.execution-tree-empty {
+  padding: 14px 16px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.execution-tree {
+  padding: 8px 0;
+}
+
+.execution-tree-node {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+}
+
+.execution-tree-node.active {
+  background: rgba(14, 116, 144, 0.08);
+}
+
+.execution-tree-node-main {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.execution-tree-node-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.execution-tree-node-title {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.execution-tree-node-meta {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.execution-tree-node-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+:deep(.execution-tree .el-tree-node__content) {
+  height: auto;
+  padding: 4px 0;
+}
+
+:deep(.execution-tree .el-tree-node:focus > .el-tree-node__content) {
+  background: transparent;
+}
+
+:deep(.execution-tree .el-tree-node.is-current > .el-tree-node__content) {
+  background: transparent;
 }
 
 @media (max-width: 1180px) {
@@ -1642,6 +2475,15 @@ onMounted(async () => {
   .recognition-grid,
   .detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .execution-tree-node {
+    flex-direction: column;
+  }
+
+  .execution-tree-node-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 }
 

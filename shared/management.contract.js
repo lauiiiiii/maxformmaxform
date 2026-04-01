@@ -289,15 +289,35 @@ export function createQuestionBankRepoDto(repo) {
   if (!repo) return null
 
   const id = toNumberOrUndefined(repo.id)
+  const creatorId = toNumberOrNull(repo.creator_id ?? repo.creatorId)
   const questionCount = Number(repo.questionCount ?? repo.question_count ?? 0)
   const createdAt = repo.created_at ?? repo.createdAt
   const updatedAt = repo.updated_at ?? repo.updatedAt
+  const rawContent = isPlainObject(repo.content) ? cloneJsonValue(repo.content) : undefined
+  const content = rawContent
+    ? {
+        ...rawContent,
+        category: rawContent.category ? String(rawContent.category) : undefined,
+        repoType: rawContent.repoType ? String(rawContent.repoType) : undefined,
+        shared: toBooleanOrUndefined(rawContent.shared),
+        practice: toBooleanOrUndefined(rawContent.practice),
+        tags: toStringArray(rawContent.tags)
+      }
+    : undefined
 
   return {
     ...repo,
     id,
+    creator_id: creatorId,
+    creatorId,
     name: String(repo.name || ''),
     description: repo.description ? String(repo.description) : undefined,
+    category: content?.category,
+    repoType: content?.repoType,
+    shared: content?.shared,
+    practice: content?.practice,
+    tags: content?.tags,
+    content,
     question_count: questionCount,
     questionCount,
     created_at: createdAt,
@@ -542,7 +562,13 @@ export function normalizeManagementAiExecutionListQuery(query = {}) {
     status: query?.status ? String(query.status).trim() : undefined,
     actor_id: toNumberOrUndefined(query?.actor_id),
     created_from: query?.created_from ? String(query.created_from).trim() : undefined,
-    created_to: query?.created_to ? String(query.created_to).trim() : undefined
+    created_to: query?.created_to ? String(query.created_to).trim() : undefined,
+    batch_id: query?.batch_id ? String(query.batch_id).trim() : undefined,
+    parent_execution_id: toNumberOrUndefined(query?.parent_execution_id),
+    step_id: query?.step_id ? String(query.step_id).trim() : undefined,
+    error_stage: query?.error_stage ? String(query.error_stage).trim() : undefined,
+    error_class: query?.error_class ? String(query.error_class).trim() : undefined,
+    retryable: toBooleanOrUndefined(query?.retryable)
   }
 }
 
@@ -551,6 +577,8 @@ export function createManagementAiExecutionDto(execution) {
 
   const id = toNumberOrUndefined(execution.id)
   const actorId = toNumberOrUndefined(execution.actor_id ?? execution.actorId)
+  const parentExecutionId = toNumberOrUndefined(execution.parent_execution_id ?? execution.parentExecutionId)
+  const stepIndex = toNumberOrUndefined(execution.step_index ?? execution.stepIndex)
   const createdAt = execution.created_at ?? execution.createdAt
   const updatedAt = execution.updated_at ?? execution.updatedAt
 
@@ -560,12 +588,23 @@ export function createManagementAiExecutionDto(execution) {
     actor_id: actorId,
     actorId,
     idempotencyKey: execution.idempotencyKey ? String(execution.idempotencyKey) : String(execution.idempotency_key || ''),
+    batchId: execution.batchId ? String(execution.batchId) : (execution.batch_id ? String(execution.batch_id) : null),
+    parent_execution_id: parentExecutionId,
+    parentExecutionId,
+    stepId: execution.stepId ? String(execution.stepId) : (execution.step_id ? String(execution.step_id) : null),
+    stepIndex,
+    step_index: stepIndex,
     action: execution.action ? String(execution.action) : '',
     requestHash: execution.requestHash ? String(execution.requestHash) : String(execution.request_hash || ''),
     status: execution.status ? String(execution.status) : 'pending',
     requestPayload: isPlainObject(execution.requestPayload) ? cloneJsonValue(execution.requestPayload) : (isPlainObject(execution.request_payload) ? cloneJsonValue(execution.request_payload) : null),
     responsePayload: isPlainObject(execution.responsePayload) ? cloneJsonValue(execution.responsePayload) : (isPlainObject(execution.response_payload) ? cloneJsonValue(execution.response_payload) : null),
     errorCode: execution.errorCode ? String(execution.errorCode) : (execution.error_code ? String(execution.error_code) : null),
+    errorStage: execution.errorStage ? String(execution.errorStage) : (execution.error_stage ? String(execution.error_stage) : null),
+    errorClass: execution.errorClass ? String(execution.errorClass) : (execution.error_class ? String(execution.error_class) : null),
+    retryable: execution.retryable == null ? null : Boolean(execution.retryable),
+    failedStepId: execution.failedStepId ? String(execution.failedStepId) : (execution.failed_step_id ? String(execution.failed_step_id) : null),
+    failedAction: execution.failedAction ? String(execution.failedAction) : (execution.failed_action ? String(execution.failed_action) : null),
     errorMessage: execution.errorMessage ? String(execution.errorMessage) : (execution.error_message ? String(execution.error_message) : null),
     created_at: createdAt,
     updated_at: updatedAt,
@@ -585,19 +624,25 @@ export function createManagementAiExecutionPageResult({ list = [], total = 0, pa
 
 export const MANAGEMENT_ACTION_PROTOCOL_VERSION = '2026-03-31'
 export const MANAGEMENT_ACTION_KIND = 'management.action'
+export const MANAGEMENT_BATCH_KIND = 'management.batch'
 export const MANAGEMENT_ACTION_PROTOCOL_KIND = 'management.action.protocol'
 export const MANAGEMENT_ACTION_BOUNDARIES = Object.freeze({
-  auth: 'admin-active-session',
+  auth: 'authenticated-role-with-action-permissions',
   audit: 'service-audit-plus-ai-execution-ledger',
   idempotency: 'required-on-execute',
   rollback: 'single-action-single-service-transaction'
 })
+
+function toManagementActionPermission(action) {
+  return `management_ai.${String(action || '').trim()}`
+}
 
 const MANAGEMENT_ACTION_DEFINITIONS = Object.freeze([
   {
     action: 'user.create',
     label: 'Create user',
     payloadField: 'input',
+    requiredPermissions: [toManagementActionPermission('user.create')],
     targetKeys: [],
     summaryTemplate: 'Create a user account',
     example: {
@@ -623,6 +668,7 @@ const MANAGEMENT_ACTION_DEFINITIONS = Object.freeze([
     action: 'user.update',
     label: 'Update user',
     payloadField: 'changes',
+    requiredPermissions: [toManagementActionPermission('user.update')],
     targetKeys: ['userId'],
     summaryTemplate: 'Update a user account',
     example: {
@@ -642,6 +688,7 @@ const MANAGEMENT_ACTION_DEFINITIONS = Object.freeze([
     action: 'user.delete',
     label: 'Delete user',
     payloadField: null,
+    requiredPermissions: [toManagementActionPermission('user.delete')],
     targetKeys: ['userId'],
     summaryTemplate: 'Delete a user account',
     example: {
@@ -656,6 +703,7 @@ const MANAGEMENT_ACTION_DEFINITIONS = Object.freeze([
     action: 'user.password.reset',
     label: 'Reset user password',
     payloadField: 'input',
+    requiredPermissions: [toManagementActionPermission('user.password.reset')],
     targetKeys: ['userId'],
     summaryTemplate: 'Reset a user password',
     example: {
@@ -673,6 +721,7 @@ const MANAGEMENT_ACTION_DEFINITIONS = Object.freeze([
     action: 'role.create',
     label: 'Create role',
     payloadField: 'input',
+    requiredPermissions: [toManagementActionPermission('role.create')],
     targetKeys: [],
     summaryTemplate: 'Create a role',
     example: {
@@ -692,6 +741,7 @@ const MANAGEMENT_ACTION_DEFINITIONS = Object.freeze([
     action: 'role.update',
     label: 'Update role',
     payloadField: 'changes',
+    requiredPermissions: [toManagementActionPermission('role.update')],
     targetKeys: ['roleId'],
     summaryTemplate: 'Update a role',
     example: {
@@ -710,6 +760,7 @@ const MANAGEMENT_ACTION_DEFINITIONS = Object.freeze([
     action: 'role.delete',
     label: 'Delete role',
     payloadField: null,
+    requiredPermissions: [toManagementActionPermission('role.delete')],
     targetKeys: ['roleId'],
     summaryTemplate: 'Delete a role',
     example: {
@@ -724,6 +775,7 @@ const MANAGEMENT_ACTION_DEFINITIONS = Object.freeze([
     action: 'dept.create',
     label: 'Create department',
     payloadField: 'input',
+    requiredPermissions: [toManagementActionPermission('dept.create')],
     targetKeys: [],
     summaryTemplate: 'Create a department',
     example: {
@@ -742,6 +794,7 @@ const MANAGEMENT_ACTION_DEFINITIONS = Object.freeze([
     action: 'dept.update',
     label: 'Update department',
     payloadField: 'changes',
+    requiredPermissions: [toManagementActionPermission('dept.update')],
     targetKeys: ['deptId'],
     summaryTemplate: 'Update a department',
     example: {
@@ -760,6 +813,7 @@ const MANAGEMENT_ACTION_DEFINITIONS = Object.freeze([
     action: 'dept.delete',
     label: 'Delete department',
     payloadField: null,
+    requiredPermissions: [toManagementActionPermission('dept.delete')],
     targetKeys: ['deptId'],
     summaryTemplate: 'Delete a department',
     example: {
@@ -774,6 +828,7 @@ const MANAGEMENT_ACTION_DEFINITIONS = Object.freeze([
     action: 'position.create',
     label: 'Create position',
     payloadField: 'input',
+    requiredPermissions: [toManagementActionPermission('position.create')],
     targetKeys: [],
     summaryTemplate: 'Create a position',
     example: {
@@ -793,6 +848,7 @@ const MANAGEMENT_ACTION_DEFINITIONS = Object.freeze([
     action: 'position.update',
     label: 'Update position',
     payloadField: 'changes',
+    requiredPermissions: [toManagementActionPermission('position.update')],
     targetKeys: ['positionId'],
     summaryTemplate: 'Update a position',
     example: {
@@ -811,6 +867,7 @@ const MANAGEMENT_ACTION_DEFINITIONS = Object.freeze([
     action: 'position.delete',
     label: 'Delete position',
     payloadField: null,
+    requiredPermissions: [toManagementActionPermission('position.delete')],
     targetKeys: ['positionId'],
     summaryTemplate: 'Delete a position',
     example: {
@@ -825,6 +882,7 @@ const MANAGEMENT_ACTION_DEFINITIONS = Object.freeze([
     action: 'flow.create',
     label: 'Create flow',
     payloadField: 'input',
+    requiredPermissions: [toManagementActionPermission('flow.create')],
     targetKeys: [],
     summaryTemplate: 'Create a workflow',
     example: {
@@ -843,6 +901,7 @@ const MANAGEMENT_ACTION_DEFINITIONS = Object.freeze([
     action: 'flow.update',
     label: 'Update flow',
     payloadField: 'changes',
+    requiredPermissions: [toManagementActionPermission('flow.update')],
     targetKeys: ['flowId'],
     summaryTemplate: 'Update a workflow',
     example: {
@@ -861,6 +920,7 @@ const MANAGEMENT_ACTION_DEFINITIONS = Object.freeze([
     action: 'flow.delete',
     label: 'Delete flow',
     payloadField: null,
+    requiredPermissions: [toManagementActionPermission('flow.delete')],
     targetKeys: ['flowId'],
     summaryTemplate: 'Delete a workflow',
     example: {
@@ -875,6 +935,7 @@ const MANAGEMENT_ACTION_DEFINITIONS = Object.freeze([
     action: 'question_bank.repo.create',
     label: 'Create question bank repo',
     payloadField: 'input',
+    requiredPermissions: [toManagementActionPermission('question_bank.repo.create')],
     targetKeys: [],
     summaryTemplate: 'Create a question bank repository',
     example: {
@@ -892,6 +953,7 @@ const MANAGEMENT_ACTION_DEFINITIONS = Object.freeze([
     action: 'question_bank.repo.update',
     label: 'Update question bank repo',
     payloadField: 'changes',
+    requiredPermissions: [toManagementActionPermission('question_bank.repo.update')],
     targetKeys: ['repoId'],
     summaryTemplate: 'Update a question bank repository',
     example: {
@@ -910,6 +972,7 @@ const MANAGEMENT_ACTION_DEFINITIONS = Object.freeze([
     action: 'question_bank.repo.delete',
     label: 'Delete question bank repo',
     payloadField: null,
+    requiredPermissions: [toManagementActionPermission('question_bank.repo.delete')],
     targetKeys: ['repoId'],
     summaryTemplate: 'Delete a question bank repository',
     example: {
@@ -924,6 +987,7 @@ const MANAGEMENT_ACTION_DEFINITIONS = Object.freeze([
     action: 'question_bank.question.create',
     label: 'Create question bank question',
     payloadField: 'input',
+    requiredPermissions: [toManagementActionPermission('question_bank.question.create')],
     targetKeys: ['repoId'],
     summaryTemplate: 'Create a question in a question bank repository',
     example: {
@@ -949,6 +1013,7 @@ const MANAGEMENT_ACTION_DEFINITIONS = Object.freeze([
     action: 'question_bank.question.delete',
     label: 'Delete question bank question',
     payloadField: null,
+    requiredPermissions: [toManagementActionPermission('question_bank.question.delete')],
     targetKeys: ['repoId', 'questionId'],
     summaryTemplate: 'Delete a question from a question bank repository',
     example: {
@@ -972,15 +1037,18 @@ export function createManagementActionProtocol() {
   return {
     kind: MANAGEMENT_ACTION_PROTOCOL_KIND,
     version: MANAGEMENT_ACTION_PROTOCOL_VERSION,
-    adminOnly: true,
+    adminOnly: false,
     boundaries: MANAGEMENT_ACTION_BOUNDARIES,
     notes: [
-      'All management JSON actions are admin-only.',
+      'Management JSON actions require per-action permissions instead of a blanket admin-only gate.',
       'AI must emit controlled action envelopes instead of writing tables directly.',
       'The server authenticates, validates, executes through existing services, and records audits.',
       'Use dryRun before execute whenever the action is AI-generated.',
       'Execute requests must carry idempotencyKey.',
-      'Each request may execute exactly one management action.'
+      'Single-action requests may execute exactly one management action.',
+      'Serial batch requests may carry multiple actions and execute them step-by-step.',
+      'Each batch step must satisfy the requiredPermissions declared for that action.',
+      'Batch steps may reference earlier step results with strings like "$steps.step-1.result.id".'
     ],
     envelope: {
       kind: MANAGEMENT_ACTION_KIND,
@@ -997,6 +1065,44 @@ export function createManagementActionProtocol() {
         generatedBy: 'string',
         traceId: 'string'
       }
+    },
+    batch: {
+      kind: MANAGEMENT_BATCH_KIND,
+      version: MANAGEMENT_ACTION_PROTOCOL_VERSION,
+      mode: 'serial',
+      dryRun: false,
+      idempotencyKey: 'string',
+      continueOnError: false,
+      batchId: 'string',
+      actions: [
+        {
+          stepId: 'step-1',
+          action: {
+            kind: MANAGEMENT_ACTION_KIND,
+            version: MANAGEMENT_ACTION_PROTOCOL_VERSION,
+            action: 'question_bank.repo.create',
+            input: {
+              name: 'Security review'
+            }
+          }
+        },
+        {
+          stepId: 'step-2',
+          action: {
+            kind: MANAGEMENT_ACTION_KIND,
+            version: MANAGEMENT_ACTION_PROTOCOL_VERSION,
+            action: 'question_bank.question.create',
+            target: {
+              repoId: '$steps.step-1.result.id'
+            },
+            input: {
+              title: 'How satisfied are you with the process?',
+              type: 'radio',
+              options: ['Good', 'Average', 'Poor']
+            }
+          }
+        }
+      ]
     },
     actions: listManagementActionDefinitions()
   }

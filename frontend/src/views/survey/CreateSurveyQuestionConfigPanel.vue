@@ -130,13 +130,52 @@
             {{ repo.name }}
           </option>
         </select>
-        <input
-          v-model="repoKeyword"
-          class="bank-search"
-          type="search"
-          placeholder="搜索题目标题或题面"
-          data-testid="survey-bank-search-input"
-        />
+        <div class="bank-filter-grid">
+          <input
+            v-model="repoKeyword"
+            class="bank-search"
+            type="search"
+            placeholder="搜索题目标题或题面"
+            data-testid="survey-bank-search-input"
+          />
+          <input
+            v-model="repoTagsText"
+            class="bank-search"
+            type="text"
+            placeholder="标签筛选，多个标签用逗号分隔"
+            data-testid="survey-bank-tags-input"
+          />
+          <select v-model="repoDifficulty" class="bank-select" data-testid="survey-bank-difficulty-select">
+            <option value="">全部难度</option>
+            <option v-for="difficulty in repoDifficultyOptions" :key="difficulty" :value="difficulty">
+              {{ difficulty }}
+            </option>
+          </select>
+        </div>
+        <div class="bank-mode-switch" role="tablist" aria-label="题库抽题模式">
+          <button
+            class="bank-mode-button"
+            :class="{ active: repoMode === 'fixed' }"
+            type="button"
+            role="tab"
+            :aria-selected="repoMode === 'fixed'"
+            data-testid="survey-bank-mode-fixed"
+            @click="repoMode = 'fixed'"
+          >
+            固定抽题
+          </button>
+          <button
+            class="bank-mode-button"
+            :class="{ active: repoMode === 'random' }"
+            type="button"
+            role="tab"
+            :aria-selected="repoMode === 'random'"
+            data-testid="survey-bank-mode-random"
+            @click="repoMode = 'random'"
+          >
+            随机抽题
+          </button>
+        </div>
       </div>
 
       <div v-if="authStore.isAdmin" class="bank-export-card">
@@ -204,6 +243,51 @@
           <div class="bank-tip">当前题库暂无匹配题目</div>
         </div>
         <div v-else class="bank-question-list">
+          <div class="bank-selection-bar">
+            <div class="bank-selection-summary" data-testid="survey-bank-result-count">
+              当前共有 {{ filteredRepoQuestions.length }} 道候选题
+            </div>
+            <template v-if="repoMode === 'fixed'">
+              <button
+                class="btn btn-sm"
+                type="button"
+                :disabled="!filteredSelectableQuestionIds.length"
+                data-testid="survey-bank-toggle-all-button"
+                @click="toggleSelectAllFilteredQuestions"
+              >
+                {{ areAllFilteredQuestionsSelected ? '取消全选当前结果' : '全选当前结果' }}
+              </button>
+              <button
+                class="btn btn-primary btn-sm"
+                type="button"
+                :disabled="fixedSelectedCount === 0"
+                data-testid="survey-bank-import-selected-button"
+                @click="handleImportSelectedQuestions"
+              >
+                加入已选 {{ fixedSelectedCount }} 题
+              </button>
+            </template>
+            <template v-else>
+              <input
+                v-model="randomQuestionCount"
+                class="bank-random-count"
+                type="number"
+                min="1"
+                step="1"
+                inputmode="numeric"
+                data-testid="survey-bank-random-count-input"
+              />
+              <button
+                class="btn btn-primary btn-sm"
+                type="button"
+                :disabled="filteredRepoQuestions.length === 0"
+                data-testid="survey-bank-import-random-button"
+                @click="handleImportRandomQuestions"
+              >
+                随机加入
+              </button>
+            </template>
+          </div>
           <article
             v-for="question in filteredRepoQuestions"
             :key="question.id"
@@ -215,18 +299,30 @@
                 <div class="bank-question-title">{{ question.title }}</div>
                 <div class="bank-question-meta">
                   <span>{{ question.type || 'input' }}</span>
+                  <span v-if="resolveDifficulty(question)">{{ resolveDifficulty(question) }}</span>
                   <span v-if="question.score != null">分值 {{ question.score }}</span>
                 </div>
               </div>
-              <button
-                class="btn btn-sm"
-                type="button"
-                :disabled="importingQuestionId === question.id"
-                :data-testid="`survey-bank-import-button-${question.id}`"
-                @click="handleImportQuestion(question)"
-              >
-                {{ importingQuestionId === question.id ? '导入中...' : '加入问卷' }}
-              </button>
+              <div class="bank-question-actions">
+                <label v-if="repoMode === 'fixed' && question.id != null" class="bank-question-check">
+                  <input
+                    type="checkbox"
+                    :checked="isFixedQuestionSelected(question.id)"
+                    :data-testid="`survey-bank-question-check-${question.id}`"
+                    @change="handleFixedQuestionCheck(question.id, $event)"
+                  />
+                  <span>固定</span>
+                </label>
+                <button
+                  class="btn btn-sm"
+                  type="button"
+                  :disabled="importingQuestionId === question.id"
+                  :data-testid="`survey-bank-import-button-${question.id}`"
+                  @click="handleImportQuestion(question)"
+                >
+                  {{ importingQuestionId === question.id ? '导入中...' : '立即加入' }}
+                </button>
+              </div>
             </div>
             <div v-if="describeStem(question)" class="bank-question-stem">
               {{ describeStem(question) }}
@@ -373,6 +469,11 @@ const repoList = ref<QuestionBankRepoDTO[]>([])
 const repoQuestions = ref<QuestionBankQuestionDTO[]>([])
 const selectedRepoId = ref('')
 const repoKeyword = ref('')
+const repoTagsText = ref('')
+const repoDifficulty = ref('')
+const repoMode = ref<'fixed' | 'random'>('fixed')
+const fixedSelectedQuestionIds = ref<number[]>([])
+const randomQuestionCount = ref('3')
 const exportTagsText = ref('')
 const exportKnowledgePointsText = ref('')
 const exportApplicableScenesText = ref('')
@@ -391,17 +492,51 @@ const currentEditingQuestion = computed(() => {
   return surveyForm.questions[currentEditingQuestionIndex.value] || null
 })
 
+const repoDifficultyOptions = computed(() => {
+  const values = repoQuestions.value
+    .map(question => resolveDifficulty(question))
+    .filter((item): item is string => Boolean(item))
+
+  return Array.from(new Set(values)).sort((left, right) => left.localeCompare(right))
+})
+
 const filteredRepoQuestions = computed(() => {
   const keyword = repoKeyword.value.trim().toLowerCase()
-  if (!keyword) return repoQuestions.value
+  const tagFilters = parseCommaSeparatedText(repoTagsText.value).map(item => item.toLowerCase())
+  const difficulty = repoDifficulty.value.trim().toLowerCase()
+
   return repoQuestions.value.filter(question => {
     const values = [
       String(question.title || ''),
       String(question.stem || question.content?.stem || '')
     ]
-    return values.some(value => value.toLowerCase().includes(keyword))
+    const matchesKeyword = keyword
+      ? values.some(value => value.toLowerCase().includes(keyword))
+      : true
+    const questionTags = collectQuestionTags(question).map(item => item.toLowerCase())
+    const matchesTags = tagFilters.length > 0
+      ? tagFilters.some(tag => questionTags.includes(tag))
+      : true
+    const questionDifficulty = resolveDifficulty(question).toLowerCase()
+    const matchesDifficulty = difficulty ? questionDifficulty === difficulty : true
+    return matchesKeyword && matchesTags && matchesDifficulty
   })
 })
+
+const filteredSelectableQuestionIds = computed(() => (
+  filteredRepoQuestions.value
+    .map(question => Number(question.id))
+    .filter(id => Number.isInteger(id) && id > 0)
+))
+
+const areAllFilteredQuestionsSelected = computed(() => (
+  filteredSelectableQuestionIds.value.length > 0
+    && filteredSelectableQuestionIds.value.every(id => fixedSelectedQuestionIds.value.includes(id))
+))
+
+const fixedSelectedCount = computed(() => (
+  filteredSelectableQuestionIds.value.filter(id => fixedSelectedQuestionIds.value.includes(id)).length
+))
 
 function describeStem(question: QuestionBankQuestionDTO) {
   return String(question.stem || question.content?.stem || '').trim()
@@ -441,19 +576,86 @@ function parseAiMetaText(value: string) {
   }
 }
 
+function collectQuestionTags(question: QuestionBankQuestionDTO) {
+  const content = question.content
+  const rawContentTags = content?.tags
+  const contentTags = Array.isArray(rawContentTags) ? rawContentTags : []
+  return Array.isArray(question.tags)
+    ? question.tags.map(item => String(item).trim()).filter(Boolean)
+    : contentTags.map(item => String(item).trim()).filter(Boolean)
+}
+
+function resolveDifficulty(question: QuestionBankQuestionDTO) {
+  return String(question.difficulty || question.content?.difficulty || '').trim()
+}
+
 function describeMetadata(question: QuestionBankQuestionDTO) {
   const content = question.content
-  const tags = Array.isArray(question.tags) ? question.tags : []
+  const tags = collectQuestionTags(question)
   const knowledgePoints = Array.isArray(question.knowledgePoints) ? question.knowledgePoints : []
   const applicableScenes = Array.isArray(question.applicableScenes)
     ? question.applicableScenes
     : (content && Array.isArray(content.applicableScenes) ? content.applicableScenes : [])
+  const difficulty = resolveDifficulty(question)
 
   return [
+    ...(difficulty ? [`难度:${difficulty}`] : []),
     ...tags.map(item => `标签:${item}`),
     ...knowledgePoints.map(item => `知识点:${item}`),
     ...applicableScenes.map(item => `场景:${item}`)
   ]
+}
+
+function isFixedQuestionSelected(questionId: number) {
+  return fixedSelectedQuestionIds.value.includes(Number(questionId))
+}
+
+function resetFixedQuestionSelection() {
+  fixedSelectedQuestionIds.value = []
+}
+
+function handleFixedQuestionCheck(questionId: number, event: Event) {
+  const checked = (event.target as HTMLInputElement)?.checked === true
+  const normalizedId = Number(questionId)
+  if (!Number.isInteger(normalizedId) || normalizedId <= 0) return
+
+  if (checked) {
+    if (!fixedSelectedQuestionIds.value.includes(normalizedId)) {
+      fixedSelectedQuestionIds.value = [...fixedSelectedQuestionIds.value, normalizedId]
+    }
+    return
+  }
+
+  fixedSelectedQuestionIds.value = fixedSelectedQuestionIds.value.filter(id => id !== normalizedId)
+}
+
+function toggleSelectAllFilteredQuestions() {
+  if (areAllFilteredQuestionsSelected.value) {
+    const visibleIds = new Set(filteredSelectableQuestionIds.value)
+    fixedSelectedQuestionIds.value = fixedSelectedQuestionIds.value.filter(id => !visibleIds.has(id))
+    return
+  }
+
+  fixedSelectedQuestionIds.value = Array.from(new Set([
+    ...fixedSelectedQuestionIds.value,
+    ...filteredSelectableQuestionIds.value
+  ]))
+}
+
+function importQuestions(questions: QuestionBankQuestionDTO[], successMessage: string) {
+  questions.forEach(question => {
+    importQuestionBankQuestion(question)
+  })
+  ElMessage.success(successMessage)
+}
+
+function buildRandomQuestionSelection(questions: QuestionBankQuestionDTO[], count: number) {
+  const shuffled = [...questions]
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1))
+    ;[shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]]
+  }
+  return shuffled.slice(0, Math.min(count, shuffled.length))
 }
 
 async function loadRepoList() {
@@ -474,6 +676,7 @@ async function loadRepoList() {
 }
 
 async function loadRepoQuestions(repoId: string) {
+  resetFixedQuestionSelection()
   if (!repoId) {
     repoQuestions.value = []
     return
@@ -498,6 +701,36 @@ async function handleImportQuestion(question: QuestionBankQuestionDTO) {
   } finally {
     importingQuestionId.value = null
   }
+}
+
+async function handleImportSelectedQuestions() {
+  const questions = filteredRepoQuestions.value.filter(question => (
+    question.id != null && fixedSelectedQuestionIds.value.includes(Number(question.id))
+  ))
+
+  if (!questions.length) {
+    ElMessage.warning('请先选择要加入问卷的题目')
+    return
+  }
+
+  importQuestions(questions, `已加入 ${questions.length} 道固定题`)
+  resetFixedQuestionSelection()
+}
+
+async function handleImportRandomQuestions() {
+  const requestedCount = Math.floor(Number(randomQuestionCount.value))
+  if (!Number.isFinite(requestedCount) || requestedCount <= 0) {
+    ElMessage.warning('随机抽题数量必须是大于 0 的整数')
+    return
+  }
+
+  if (!filteredRepoQuestions.value.length) {
+    ElMessage.warning('当前没有可随机抽取的题目')
+    return
+  }
+
+  const pickedQuestions = buildRandomQuestionSelection(filteredRepoQuestions.value, requestedCount)
+  importQuestions(pickedQuestions, `已随机加入 ${pickedQuestions.length} 道题`)
 }
 
 async function handleSaveCurrentQuestion() {
@@ -529,6 +762,10 @@ watch(() => panelTab.value, async nextTab => {
   if (nextTab !== 'repo') return
   await loadRepoList()
 }, { immediate: true })
+
+watch([repoKeyword, repoTagsText, repoDifficulty], () => {
+  resetFixedQuestionSelection()
+})
 
 watch(selectedRepoId, async repoId => {
   await loadRepoQuestions(repoId)

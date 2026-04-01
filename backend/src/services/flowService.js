@@ -11,7 +11,8 @@ import { createFlowDto, MANAGEMENT_ERROR_CODES } from '../../../shared/managemen
 
 const FLOW_STATUSES = new Set(['draft', 'active', 'disabled'])
 
-function ensureAdmin(actor) {
+function ensureAdmin(actor, options = {}) {
+  if (options.skipAdminCheck) return
   throwManagementPolicyError(getAdminPolicy(actor))
 }
 
@@ -72,8 +73,8 @@ export async function listManagedFlows({ actor }) {
   return flows.map(item => createFlowDto(item))
 }
 
-export async function createManagedFlow({ actor, body = {} }) {
-  ensureAdmin(actor)
+export async function createManagedFlow({ actor, body = {} }, options = {}) {
+  ensureAdmin(actor, options)
   body = ensurePlainObjectPayload(body)
 
   return runManagementTransaction(async db => {
@@ -101,11 +102,11 @@ export async function createManagedFlow({ actor, body = {} }) {
     }, { db })
 
     return createFlowDto(flow)
-  })
+  }, options)
 }
 
-export async function updateManagedFlow({ actor, flowId, body = {} }) {
-  ensureAdmin(actor)
+export async function updateManagedFlow({ actor, flowId, body = {} }, options = {}) {
+  ensureAdmin(actor, options)
   body = ensurePlainObjectPayload(body)
   return runManagementTransaction(async db => {
     await getManagedFlowOrThrow(flowId, { db })
@@ -134,11 +135,11 @@ export async function updateManagedFlow({ actor, flowId, body = {} }) {
     }, { db })
 
     return createFlowDto(flow)
-  })
+  }, options)
 }
 
-export async function deleteManagedFlow({ actor, flowId }) {
-  ensureAdmin(actor)
+export async function deleteManagedFlow({ actor, flowId }, options = {}) {
+  ensureAdmin(actor, options)
   await runManagementTransaction(async db => {
     const flow = await getManagedFlowOrThrow(flowId, { db })
     await flowRepository.delete(flowId, { db })
@@ -158,5 +159,5 @@ export async function deleteManagedFlow({ actor, flowId }) {
         entityId: flow.id
       }
     }, { db })
-  })
+  }, options)
 }

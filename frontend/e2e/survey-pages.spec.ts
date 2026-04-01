@@ -163,7 +163,6 @@ test.describe('Survey Browser E2E', () => {
 
   test('editor can import a structured question bank question into the survey editor', async ({ page, request }) => {
     const admin = await loginUser(request, 'admin', '123456')
-    const user = await createUser(request)
     const repo = await createRepo(request, admin.token, {
       name: `Repo Import ${Date.now()}`
     })
@@ -179,7 +178,7 @@ test.describe('Survey Browser E2E', () => {
       await dialog.accept()
     })
 
-    const survey = await createSurvey(request, user.token, {
+    const survey = await createSurvey(request, admin.token, {
       title: 'Repo Import Survey',
       description: 'Question bank import test.',
       questions: [
@@ -193,7 +192,7 @@ test.describe('Survey Browser E2E', () => {
       }
     })
 
-    await withAuth(page, user.token)
+    await withAuth(page, admin.token)
     await page.goto(`/surveys/${survey.id}/edit`)
     await page.waitForURL(new RegExp(`/surveys/${survey.id}/edit(\\?|$)`))
 
@@ -212,7 +211,7 @@ test.describe('Survey Browser E2E', () => {
 
     const surveyResponse = await request.get(`${backendBaseUrl}/api/surveys/${survey.id}`, {
       headers: {
-        Authorization: `Bearer ${user.token}`
+        Authorization: `Bearer ${admin.token}`
       }
     })
     expect(surveyResponse.ok()).toBeTruthy()
@@ -220,6 +219,77 @@ test.describe('Survey Browser E2E', () => {
     expect(surveyBody.data.questions[1].title).toBe('请选择最符合你当前登录频率的一项。')
     expect(surveyBody.data.questions[1].description).toBe('用于判断用户活跃频率。')
     expect(surveyBody.data.questions[1].options.map((item: { label: string }) => item.label)).toEqual(['每天', '每周'])
+  })
+
+  test('editor can filter question bank items and add fixed and random draws into the survey editor', async ({ page, request }) => {
+    const admin = await loginUser(request, 'admin', '123456')
+    const repo = await createRepo(request, admin.token, {
+      name: `Repo Draw ${Date.now()}`
+    })
+    const fixedQuestion = await createBankQuestion(request, admin.token, repo.id, {
+      title: '渠道触达题',
+      type: 'radio',
+      stem: '你通常通过哪个渠道收到通知？',
+      options: ['短信', '邮件'],
+      tags: ['渠道'],
+      difficulty: 'easy'
+    })
+    const randomQuestion = await createBankQuestion(request, admin.token, repo.id, {
+      title: '渠道随机题',
+      type: 'radio',
+      stem: '你更偏好哪种触达方式？',
+      options: ['社群', '私信'],
+      tags: ['渠道'],
+      difficulty: 'hard'
+    })
+    await createBankQuestion(request, admin.token, repo.id, {
+      title: '满意度题',
+      type: 'radio',
+      stem: '你对本次活动满意吗？',
+      options: ['满意', '一般'],
+      tags: ['满意度'],
+      difficulty: 'easy'
+    })
+
+    const survey = await createSurvey(request, admin.token, {
+      title: 'Repo Draw Survey',
+      description: 'Question bank draw modes test.',
+      questions: [
+        {
+          type: 'input',
+          title: 'Existing question'
+        }
+      ],
+      settings: {
+        allowMultipleSubmissions: true
+      }
+    })
+
+    await withAuth(page, admin.token)
+    await page.goto(`/surveys/${survey.id}/edit`)
+    await page.waitForURL(new RegExp(`/surveys/${survey.id}/edit(\\?|$)`))
+
+    await page.getByTestId('survey-panel-tab-repo').click()
+    await page.getByTestId('survey-bank-repo-select').selectOption(String(repo.id))
+
+    await page.getByTestId('survey-bank-tags-input').fill('渠道')
+    await page.getByTestId('survey-bank-difficulty-select').selectOption('easy')
+    await expect(page.getByTestId(`survey-bank-question-${fixedQuestion.id}`)).toBeVisible()
+    await expect(page.getByTestId(`survey-bank-question-${randomQuestion.id}`)).toHaveCount(0)
+
+    await page.getByTestId(`survey-bank-question-check-${fixedQuestion.id}`).check()
+    await page.getByTestId('survey-bank-import-selected-button').click()
+    await expect(page.getByTestId('question-editor-1')).toBeVisible()
+    await expect(page.getByTestId('question-title-input-1')).toHaveValue('你通常通过哪个渠道收到通知？')
+
+    await page.getByTestId('survey-bank-mode-random').click()
+    await page.getByTestId('survey-bank-difficulty-select').selectOption('hard')
+    await expect(page.getByTestId(`survey-bank-question-${randomQuestion.id}`)).toBeVisible()
+    await page.getByTestId('survey-bank-random-count-input').fill('1')
+    await page.getByTestId('survey-bank-import-random-button').click()
+
+    await expect(page.getByTestId('question-editor-2')).toBeVisible()
+    await expect(page.getByTestId('question-title-input-2')).toHaveValue('你更偏好哪种触达方式？')
   })
 
   test('editor can save the current survey question back into a question bank repo', async ({ page, request }) => {
@@ -275,7 +345,7 @@ test.describe('Survey Browser E2E', () => {
     expect(repoQuestionsBody.data[0].title).toBe('你通常通过什么渠道了解活动信息？')
     expect(repoQuestionsBody.data[0].analysis).toBe('用于识别活动传播渠道。')
     expect(repoQuestionsBody.data[0].options.map((item: { label: string }) => item.label)).toEqual(['微信群', '邮件通知'])
-    expect(repoQuestionsBody.data[0].tags).toEqual(['渠道', '触达'])
+    expect(repoQuestionsBody.data[0].tags).toEqual(['渠道', '触达', 'AI生成'])
     expect(repoQuestionsBody.data[0].knowledgePoints).toEqual(['用户研究', '传播分析'])
     expect(repoQuestionsBody.data[0].applicableScenes).toEqual(['活动报名', '市场调研'])
     expect(repoQuestionsBody.data[0].content?.surveyQuestion?.type).toBe('radio')

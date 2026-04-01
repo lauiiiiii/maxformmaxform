@@ -159,6 +159,7 @@ export interface SurveyAiGenerateResultDTO {
     providerLabel: string
     model: string
   }
+  aiMeta?: Record<string, unknown>
 }
 
 export async function getSurveyAiProtocol(): Promise<SurveyAiProtocolDTO> {

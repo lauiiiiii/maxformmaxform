@@ -53,9 +53,10 @@
     </header>
     <div class="survey-list-page">
     <aside class="sidebar">
-      <button class="create-btn" @click="createSurvey">+ 创建问卷</button>
+      <button v-if="activeMenu !== 'repo'" class="create-btn" @click="createSurvey">+ 创建问卷</button>
       <ul class="nav">
         <li :class="{active: activeMenu==='all'}" @click="setMenu('all')">全部问卷</li>
+        <li :class="{active: activeMenu==='repo'}" @click="setMenu('repo')">题库管理</li>
         <li :class="{active: activeMenu==='trash'}" @click="setMenu('trash')">回收站</li>
         <li :class="{active: activeMenu==='folder'}" @click="setMenu('folder')">文件夹</li>
         <li :class="{active: activeMenu==='team'}" @click="setMenu('team')">协作</li>
@@ -334,6 +335,9 @@
               </el-tabs>
             </div>
           </template>
+          <template v-else-if="activeMenu==='repo'">
+            <QuestionBankPage />
+          </template>
           <template v-else-if="delayedLoading">
             <div class="skeleton-wrapper" aria-label="加载中">
               <div class="skeleton-card" v-for="n in 3" :key="n">
@@ -592,9 +596,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useRouter, onBeforeRouteUpdate } from 'vue-router'
+import { useRouter, useRoute, onBeforeRouteUpdate } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Bell } from '@element-plus/icons-vue'
+import QuestionBankPage from '@/views/admin/Repos.vue'
 import { listSurveys, deleteSurvey as apiDeleteSurvey, publishSurvey, closeSurvey, getSurvey, createSurvey as apiCreateSurvey, moveSurvey, listTrash, restoreSurvey, forceDeleteSurvey, clearTrash } from '@/api/surveys'
 import { listFolders, listAllFolders, createFolder, renameFolder, deleteFolder, type FolderDTO } from '@/api/folders'
 import { listDepts, createDept, updateDept, deleteDept } from '@/api/depts'
@@ -604,6 +609,7 @@ import { useAuthStore } from '@/stores/auth'
 import type { Dept, User } from '@/types/user'
 // 已移除编码逻辑，直接使用数字ID
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const { user: currentUser, username, isAdmin, roleLabel: authRoleLabel, identityCode: authIdentityCode } = storeToRefs(authStore)
 // 顶栏品牌图片：若存在 public/brand-logo.png 则优先显示；否则回退内联图标
@@ -641,7 +647,7 @@ const loading = ref(false)
 const delayedLoading = ref(false)
 let loadingTimer: number | null = null
 const surveys = ref<any[]>([])
-const activeMenu = ref('all')
+const activeMenu = ref(String(route.query.tab || 'all'))
 // 文件夹相关状态
 const allFolders = ref<FolderDTO[]>([])
 const childFolders = ref<FolderDTO[]>([])
@@ -951,6 +957,13 @@ const handleTeamAction = async (action: 'create' | 'join') => {
 }
 const setMenu = async (menu:string) => {
   activeMenu.value = menu
+  const nextQuery = { ...route.query }
+  if (menu === 'all') {
+    delete nextQuery.tab
+  } else {
+    nextQuery.tab = menu
+  }
+  router.replace({ path: '/user-dashboard', query: nextQuery })
   if (menu === 'folder') {
     // 点击“文件夹”时，重置为根目录（全部）
     await enterFolder(null)
@@ -958,6 +971,8 @@ const setMenu = async (menu:string) => {
     await loadTrash()
   } else if (menu === 'team' || menu === 'department') {
     await loadOrgData()
+  } else if (menu === 'repo' || menu === 'profile') {
+    return
   } else {
     await fetchSurveys()
   }
@@ -1089,12 +1104,26 @@ const fetchSurveys = async () => {
 }
 
 onMounted(async () => {
+  if (route.query.tab && activeMenu.value !== String(route.query.tab)) {
+    activeMenu.value = String(route.query.tab)
+  }
   await loadUnreadCount()
   if (msgTimer) { clearInterval(msgTimer); msgTimer = null }
   msgTimer = window.setInterval(loadUnreadCount, 30000) // 30s 轮询未读数
 })
 onUnmounted(() => { if (msgTimer) { clearInterval(msgTimer); msgTimer = null } })
-onMounted(fetchSurveys)
+onMounted(async () => {
+  if (activeMenu.value === 'repo' || activeMenu.value === 'profile') return
+  if (activeMenu.value === 'trash') {
+    await loadTrash()
+    return
+  }
+  if (activeMenu.value === 'team' || activeMenu.value === 'department') {
+    await loadOrgData()
+    return
+  }
+  await fetchSurveys()
+})
 onMounted(async ()=>{ try { allFolders.value = await listAllFolders() } catch {} })
 onMounted(async () => { if (isAdminUser.value) await loadOrgData() })
 
@@ -1119,12 +1148,23 @@ const enterFolder = async (id: number | null) => {
 
 // 当从编辑页返回或切换路由时，刷新列表
 onBeforeRouteUpdate((to, from, next) => {
+  const nextMenu = String(to.query.tab || 'all')
+  activeMenu.value = nextMenu
+  if (nextMenu === 'repo' || nextMenu === 'profile') return next()
+  if (nextMenu === 'trash') {
+    loadTrash().finally(() => next())
+    return
+  }
+  if (nextMenu === 'team' || nextMenu === 'department') {
+    loadOrgData().finally(() => next())
+    return
+  }
   fetchSurveys().finally(() => next())
 })
 
 // 页面重新获得焦点时自动刷新
 const handleVisibility = () => {
-  if (document.visibilityState === 'visible') fetchSurveys()
+  if (document.visibilityState === 'visible' && !['repo', 'profile'].includes(activeMenu.value)) fetchSurveys()
 }
 onMounted(() => document.addEventListener('visibilitychange', handleVisibility))
 onUnmounted(() => document.removeEventListener('visibilitychange', handleVisibility))

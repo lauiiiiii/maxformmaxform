@@ -211,10 +211,13 @@ export async function migrate() {
   if (!await knex.schema.hasTable('question_bank_repos')) {
     await knex.schema.createTable('question_bank_repos', t => {
       t.increments('id').unsigned()
+      t.integer('creator_id').unsigned().nullable()
       t.string('name', 100).notNullable()
       t.text('description').nullable()
+      t.json('content').nullable()
       t.datetime('created_at').defaultTo(knex.fn.now())
       t.datetime('updated_at').defaultTo(knex.fn.now())
+      t.index('creator_id')
     })
   }
 
@@ -238,17 +241,29 @@ export async function migrate() {
       t.increments('id').unsigned()
       t.integer('actor_id').unsigned().notNullable()
       t.string('idempotency_key', 120).notNullable()
+      t.string('batch_id', 120).nullable()
+      t.integer('parent_execution_id').unsigned().nullable()
+      t.string('step_id', 120).nullable()
+      t.integer('step_index').unsigned().nullable()
       t.string('action', 120).notNullable()
       t.string('request_hash', 64).notNullable()
       t.string('status', 20).notNullable().defaultTo('pending')
       t.json('request_payload').nullable()
       t.json('response_payload').nullable()
       t.string('error_code', 80).nullable()
+      t.string('error_stage', 40).nullable()
+      t.string('error_class', 60).nullable()
+      t.boolean('retryable').nullable()
+      t.string('failed_step_id', 120).nullable()
+      t.string('failed_action', 120).nullable()
       t.text('error_message').nullable()
       t.datetime('created_at').defaultTo(knex.fn.now())
       t.datetime('updated_at').defaultTo(knex.fn.now())
       t.unique(['actor_id', 'idempotency_key'])
       t.index('actor_id')
+      t.index('batch_id')
+      t.index('parent_execution_id')
+      t.index('step_id')
       t.index('action')
       t.index('status')
       t.index('created_at')
@@ -272,6 +287,67 @@ export async function migrate() {
     if (!await knex.schema.hasColumn('question_bank_questions', 'content')) {
       await knex.schema.alterTable('question_bank_questions', t => {
         t.json('content').nullable()
+      })
+    }
+  }
+
+  if (await knex.schema.hasTable('question_bank_repos')) {
+    if (!await knex.schema.hasColumn('question_bank_repos', 'creator_id')) {
+      await knex.schema.alterTable('question_bank_repos', t => {
+        t.integer('creator_id').unsigned().nullable().index()
+      })
+    }
+    if (!await knex.schema.hasColumn('question_bank_repos', 'content')) {
+      await knex.schema.alterTable('question_bank_repos', t => {
+        t.json('content').nullable()
+      })
+    }
+  }
+
+  if (await knex.schema.hasTable('management_ai_executions')) {
+    if (!await knex.schema.hasColumn('management_ai_executions', 'batch_id')) {
+      await knex.schema.alterTable('management_ai_executions', t => {
+        t.string('batch_id', 120).nullable().index()
+      })
+    }
+    if (!await knex.schema.hasColumn('management_ai_executions', 'parent_execution_id')) {
+      await knex.schema.alterTable('management_ai_executions', t => {
+        t.integer('parent_execution_id').unsigned().nullable().index()
+      })
+    }
+    if (!await knex.schema.hasColumn('management_ai_executions', 'step_id')) {
+      await knex.schema.alterTable('management_ai_executions', t => {
+        t.string('step_id', 120).nullable().index()
+      })
+    }
+    if (!await knex.schema.hasColumn('management_ai_executions', 'step_index')) {
+      await knex.schema.alterTable('management_ai_executions', t => {
+        t.integer('step_index').unsigned().nullable()
+      })
+    }
+    if (!await knex.schema.hasColumn('management_ai_executions', 'error_stage')) {
+      await knex.schema.alterTable('management_ai_executions', t => {
+        t.string('error_stage', 40).nullable()
+      })
+    }
+    if (!await knex.schema.hasColumn('management_ai_executions', 'error_class')) {
+      await knex.schema.alterTable('management_ai_executions', t => {
+        t.string('error_class', 60).nullable()
+      })
+    }
+    if (!await knex.schema.hasColumn('management_ai_executions', 'retryable')) {
+      await knex.schema.alterTable('management_ai_executions', t => {
+        t.boolean('retryable').nullable()
+      })
+    }
+    if (!await knex.schema.hasColumn('management_ai_executions', 'failed_step_id')) {
+      await knex.schema.alterTable('management_ai_executions', t => {
+        t.string('failed_step_id', 120).nullable()
+      })
+    }
+    if (!await knex.schema.hasColumn('management_ai_executions', 'failed_action')) {
+      await knex.schema.alterTable('management_ai_executions', t => {
+        t.string('failed_action', 120).nullable()
       })
     }
   }

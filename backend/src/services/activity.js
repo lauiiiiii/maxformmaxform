@@ -63,6 +63,6 @@ export async function recordManagementAction({ actor, audit, message }, options 
   }
 }
 
-export async function runManagementTransaction(callback) {
-  return transactionManager.run(callback)
+export async function runManagementTransaction(callback, options = {}) {
+  return transactionManager.run(callback, options)
 }

@@ -13,7 +13,7 @@ import User from '../src/models/User.js'
 import transactionManager from '../src/db/transaction.js'
 import { registerApiRouteHarness } from './helpers/apiRouteHarness.js'
 
-const { request, requestPublic } = registerApiRouteHarness()
+const { request, requestPublic, requestRaw } = registerApiRouteHarness()
 
 function createToken(payload = {}) {
   return jwt.sign(
@@ -376,18 +376,42 @@ test('GET /api/repos lists question bank repos through the service flow', async 
   }])
 })
 
-test('GET /api/repos rejects non-admin actors from reading question bank repos', async () => {
-  QuestionBankRepo.list = async () => [
+test('GET /api/repos forwards repo filters to the question bank service flow', async () => {
+  let listOptions = null
+
+  QuestionBankRepo.list = async options => {
+    listOptions = options
+    return []
+  }
+
+  const { response, json } = await request('/repos?keyword=common&category=customer&repoType=shared')
+
+  assert.equal(response.status, 200)
+  assert.equal(json.success, true)
+  assert.deepEqual(listOptions, {
+    keyword: 'common',
+    category: 'customer',
+    repoType: 'shared'
+  })
+})
+
+test('GET /api/repos allows authenticated non-admin actors to read question bank repos', async () => {
+  let listOptions = null
+  QuestionBankRepo.list = async options => {
+    listOptions = options
+    return [
     { id: 7, name: 'Shared bank', question_count: 2 }
-  ]
+    ]
+  }
 
   const { response, json } = await requestPublic('/repos', {
     headers: { Authorization: `Bearer ${createToken()}` }
   })
 
-  assert.equal(response.status, 403)
-  assert.equal(json.success, false)
-  assert.equal(json.error.code, 'MGMT_ACCESS_FORBIDDEN')
+  assert.equal(response.status, 200)
+  assert.equal(json.success, true)
+  assert.equal(Array.isArray(json.data), true)
+  assert.equal(listOptions.creator_id, 2)
 })
 
 test('POST /api/repos rejects invalid payload structure for repo name', async () => {
@@ -411,7 +435,7 @@ test('GET /api/repos/:id/questions rejects invalid repo id structure', async () 
   assert.match(json.error.message, /id must be an integer/i)
 })
 
-test('GET /api/repos/:id/questions rejects non-admin actors from reading question bank questions', async () => {
+test('GET /api/repos/:id/questions allows authenticated non-admin actors to read question bank questions', async () => {
   QuestionBankRepo.findById = async id => ({ id: Number(id), name: 'Shared bank', question_count: 1 })
   QuestionBankQuestion.listByRepoId = async repoId => [{
     id: 32,
@@ -431,9 +455,21 @@ test('GET /api/repos/:id/questions rejects non-admin actors from reading questio
     headers: { Authorization: `Bearer ${createToken()}` }
   })
 
-  assert.equal(response.status, 403)
+  assert.equal(response.status, 200)
+  assert.equal(json.success, true)
+  assert.equal(json.data[0].title, 'Shared question')
+})
+
+test('GET /api/repos/:id/questions returns not found for repos owned by another user', async () => {
+  QuestionBankRepo.findById = async (_id, options) => (options?.creator_id === 2 ? null : { id: 6, name: 'Other repo' })
+
+  const { response, json } = await requestPublic('/repos/6/questions', {
+    headers: { Authorization: `Bearer ${createToken()}` }
+  })
+
+  assert.equal(response.status, 404)
   assert.equal(json.success, false)
-  assert.equal(json.error.code, 'MGMT_ACCESS_FORBIDDEN')
+  assert.equal(json.error.code, 'MGMT_QUESTION_BANK_REPO_NOT_FOUND')
 })
 
 test('GET /api/repos/:id/questions returns structured stem and options fields', async () => {
@@ -633,7 +669,7 @@ test('POST /api/repos/:id/questions writes audit and message records after creat
       { label: 'Weekly', value: '2' }
     ],
     score: 5,
-    tags: ['usage', 'frequency'],
+    tags: ['usage', 'frequency', 'AI生成'],
     applicableScenes: ['onboarding', 'engagement'],
     aiMeta: {
       generatedBy: 'gpt-5.2',
@@ -667,6 +703,135 @@ test('DELETE /api/repos/:id/questions/:questionId deletes a nested question thro
   assert.equal(response.status, 200)
   assert.equal(json.success, true)
   assert.deepEqual(deletedArgs, { id: 11, repoId: 4 })
+})
+
+test('PUT /api/repos/:id/questions/:questionId updates a nested question through the service flow', async () => {
+  let updatePayload = null
+
+  QuestionBankRepo.findById = async id => ({ id: Number(id), name: 'Repo 1', question_count: 1 })
+  QuestionBankQuestion.findById = async (id, repoId) => ({
+    id: Number(id),
+    repo_id: Number(repoId),
+    title: 'Question 1',
+    type: 'radio',
+    content: {
+      title: 'Question 1',
+      questionType: 'radio',
+      stem: 'Old stem',
+      options: [
+        { label: 'A', value: '1' },
+        { label: 'B', value: '2' }
+      ]
+    }
+  })
+  AuditLog.create = async () => ({ id: 1 })
+  Message.create = async () => ({ id: 2 })
+  QuestionBankQuestion.update = async (_id, _repoId, payload) => {
+    updatePayload = payload
+    return {
+      id: 11,
+      repo_id: 4,
+      title: payload.title,
+      type: payload.type,
+      content: payload.content
+    }
+  }
+
+  const { response, json } = await request('/repos/4/questions/11', {
+    method: 'PUT',
+    body: {
+      title: 'Updated question',
+      stem: 'Updated stem',
+      options: ['One', 'Two']
+    }
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(json.success, true)
+  assert.equal(json.data.title, 'Updated question')
+  assert.equal(updatePayload.title, 'Updated question')
+  assert.equal(updatePayload.content.stem, 'Updated stem')
+  assert.deepEqual(updatePayload.content.options, [
+    { label: 'One', value: '1' },
+    { label: 'Two', value: '2' }
+  ])
+})
+
+test('POST /api/repos creates a repo owned by the current actor', async () => {
+  let createPayload = null
+
+  QuestionBankRepo.create = async payload => {
+    createPayload = payload
+    return {
+      id: 19,
+      ...payload,
+      question_count: 0
+    }
+  }
+  AuditLog.create = async () => ({ id: 1 })
+  Message.create = async () => ({ id: 2 })
+
+  const { response, json } = await request('/repos', {
+    method: 'POST',
+    body: { name: 'Owned repo' }
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(json.success, true)
+  assert.equal(createPayload.creator_id, 1)
+  assert.equal(json.data.creator_id, 1)
+})
+
+test('POST /api/repos/:id/import imports text questions into a repo', async () => {
+  QuestionBankRepo.findById = async id => ({ id: Number(id), name: 'Imported repo', question_count: 0 })
+  QuestionBankQuestion.create = async payload => ({
+    id: 91,
+    ...payload,
+    repo_id: payload.repo_id,
+    created_at: '2026-04-01T00:00:00.000Z',
+    updated_at: '2026-04-01T00:00:00.000Z'
+  })
+  AuditLog.create = async () => ({ id: 1 })
+  Message.create = async () => ({ id: 2 })
+
+  const { response, json } = await request('/repos/4/import', {
+    method: 'POST',
+    body: {
+      format: 'txt',
+      text: '标题: 导入题目\n类型: radio\n题干: 请选择\n选项: 选项A | 选项B'
+    }
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(json.success, true)
+  assert.equal(json.data.totalCount, 1)
+  assert.equal(json.data.createdCount, 1)
+  assert.equal(json.data.failedCount, 0)
+  assert.equal(json.data.questions[0].title, '导入题目')
+  assert.equal(json.data.questions[0].stem, '请选择')
+})
+
+test('GET /api/repos/:id/export returns a downloadable question bank payload', async () => {
+  QuestionBankRepo.findById = async id => ({ id: Number(id), name: 'Export repo', question_count: 1 })
+  QuestionBankQuestion.listByRepoId = async () => [{
+    id: 12,
+    repo_id: 4,
+    title: 'Question 1',
+    type: 'radio',
+    content: {
+      stem: 'Pick one',
+      options: [
+        { label: 'A', value: '1' },
+        { label: 'B', value: '2' }
+      ]
+    }
+  }]
+
+  const { response, buffer } = await requestRaw('/repos/4/export?format=json')
+
+  assert.equal(response.status, 200)
+  assert.match(response.headers.get('content-disposition') || '', /Export-repo\.json/i)
+  assert.match(buffer.toString('utf8'), /Question 1/)
 })
 
 test('GET /api/users/:id falls back to username lookup through the service flow', async () => {

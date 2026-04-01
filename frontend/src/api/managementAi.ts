@@ -2,21 +2,24 @@ import http from './http'
 import type { ApiResponse } from '../types/api'
 import type {
   ManagementActionEnvelopeDTO,
+  ManagementBatchEnvelopeDTO,
   ManagementAiExecutionListQueryDTO,
   ManagementAiExecutionPageDTO,
   ManagementActionProtocolDTO
 } from '../../../shared/management.contract.js'
 
 export interface ManagementActionRunResultDTO {
+  kind?: 'management.action' | 'management.batch'
   adminOnly: boolean
   dryRun: boolean
   executed: boolean
   replayed?: boolean
+  batchId?: string | null
   idempotencyKey?: string | null
   executionId?: number | null
   boundaries?: Record<string, unknown>
   summary: string
-  normalized: ManagementActionEnvelopeDTO
+  normalized: ManagementActionEnvelopeDTO | ManagementBatchEnvelopeDTO
   result?: unknown
 }
 
@@ -69,7 +72,7 @@ export async function exportManagementAiExecutions(
   }
 }
 
-export async function runManagementAiAction(payload: ManagementActionEnvelopeDTO): Promise<ManagementActionRunResultDTO> {
+export async function runManagementAiAction(payload: ManagementActionEnvelopeDTO | ManagementBatchEnvelopeDTO): Promise<ManagementActionRunResultDTO> {
   const { data } = await http.post<ApiResponse<ManagementActionRunResultDTO>>('/management-ai/actions', payload)
   return data.data!
 }

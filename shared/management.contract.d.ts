@@ -114,8 +114,16 @@ export interface FlowFormDTO {
 
 export interface QuestionBankRepoDTO {
   id?: number
+  creator_id?: number | null
+  creatorId?: number | null
   name: string
   description?: string
+  category?: string
+  repoType?: string
+  shared?: boolean
+  practice?: boolean
+  tags?: string[]
+  content?: Record<string, unknown>
   question_count?: number
   questionCount?: number
   created_at?: string
@@ -127,6 +135,18 @@ export interface QuestionBankRepoDTO {
 export interface QuestionBankRepoFormDTO {
   name: string
   description?: string
+  category?: string
+  repoType?: string
+  shared?: boolean
+  practice?: boolean
+  tags?: string[] | string
+  content?: Record<string, unknown>
+}
+
+export interface QuestionBankRepoListQueryDTO {
+  keyword?: string
+  category?: string
+  repoType?: string
 }
 
 export interface QuestionBankQuestionOptionDTO {
@@ -191,6 +211,11 @@ export interface QuestionBankQuestionFormDTO {
   applicableScenes?: string[] | string
   aiMeta?: Record<string, unknown>
   content?: QuestionBankQuestionContentDTO
+}
+
+export interface QuestionBankQuestionListQueryDTO {
+  keyword?: string
+  type?: string
 }
 
 export interface FolderDTO {
@@ -284,12 +309,23 @@ export interface ManagementAiExecutionDTO {
   actor_id?: number
   actorId?: number
   idempotencyKey: string
+  batchId?: string | null
+  parent_execution_id?: number | null
+  parentExecutionId?: number | null
+  stepId?: string | null
+  step_index?: number | null
+  stepIndex?: number | null
   action: string
   requestHash: string
   status: string
   requestPayload?: Record<string, unknown> | null
   responsePayload?: Record<string, unknown> | null
   errorCode?: string | null
+  errorStage?: string | null
+  errorClass?: string | null
+  retryable?: boolean | null
+  failedStepId?: string | null
+  failedAction?: string | null
   errorMessage?: string | null
   created_at?: string | null
   updated_at?: string | null
@@ -303,6 +339,12 @@ export interface ManagementAiExecutionListQueryDTO extends PaginationQueryDTO {
   actor_id?: number | string | null
   created_from?: string | null
   created_to?: string | null
+  batch_id?: string | null
+  parent_execution_id?: number | string | null
+  step_id?: string | null
+  error_stage?: string | null
+  error_class?: string | null
+  retryable?: boolean | string | number | null
 }
 
 export type UserPageDTO = PaginatedResultDTO<UserDTO>
@@ -459,6 +501,12 @@ export function normalizeManagementAiExecutionListQuery(query?: ManagementAiExec
   actor_id?: number
   created_from?: string
   created_to?: string
+  batch_id?: string
+  parent_execution_id?: number
+  step_id?: string
+  error_stage?: string
+  error_class?: string
+  retryable?: boolean
 }
 export function createManagementAiExecutionDto(execution?: Partial<ManagementAiExecutionDTO> | null): ManagementAiExecutionDTO | null
 export function createManagementAiExecutionPageResult<T extends Partial<ManagementAiExecutionDTO>>(input?: {
@@ -481,10 +529,29 @@ export interface ManagementActionEnvelopeDTO {
   meta?: Record<string, unknown>
 }
 
+export interface ManagementBatchStepDTO {
+  stepId: string
+  action: ManagementActionEnvelopeDTO
+}
+
+export interface ManagementBatchEnvelopeDTO {
+  kind?: 'management.batch'
+  version?: string
+  batchId?: string
+  dryRun?: boolean
+  idempotencyKey?: string
+  mode?: 'serial'
+  continueOnError?: boolean
+  reason?: string
+  meta?: Record<string, unknown>
+  actions: ManagementBatchStepDTO[]
+}
+
 export interface ManagementActionDefinitionDTO {
   action: string
   label: string
   payloadField?: 'input' | 'changes' | null
+  requiredPermissions: string[]
   targetKeys: string[]
   summaryTemplate?: string
   example: ManagementActionEnvelopeDTO
@@ -495,21 +562,23 @@ export interface ManagementActionProtocolDTO {
   version: string
   adminOnly: boolean
   boundaries: {
-    auth: 'admin-active-session'
+    auth: 'authenticated-role-with-action-permissions'
     audit: 'service-audit-plus-ai-execution-ledger'
     idempotency: 'required-on-execute'
     rollback: 'single-action-single-service-transaction'
   }
   notes: string[]
   envelope: ManagementActionEnvelopeDTO
+  batch: ManagementBatchEnvelopeDTO
   actions: ManagementActionDefinitionDTO[]
 }
 
 export const MANAGEMENT_ACTION_PROTOCOL_VERSION: '2026-03-31'
 export const MANAGEMENT_ACTION_KIND: 'management.action'
+export const MANAGEMENT_BATCH_KIND: 'management.batch'
 export const MANAGEMENT_ACTION_PROTOCOL_KIND: 'management.action.protocol'
 export const MANAGEMENT_ACTION_BOUNDARIES: Readonly<{
-  auth: 'admin-active-session'
+  auth: 'authenticated-role-with-action-permissions'
   audit: 'service-audit-plus-ai-execution-ledger'
   idempotency: 'required-on-execute'
   rollback: 'single-action-single-service-transaction'

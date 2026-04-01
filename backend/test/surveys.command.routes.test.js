@@ -43,6 +43,36 @@ test('POST /api/surveys creates a survey through the service flow', async () => 
   assert.equal(createdPayloads[0].questions[0].type, 'input')
 })
 
+test('POST /api/surveys allows saving an empty-question draft', async () => {
+  const createdPayloads = []
+
+  Survey.create = async payload => {
+    createdPayloads.push(payload)
+    return {
+      id: 11,
+      title: payload.title,
+      creator_id: payload.creator_id,
+      questions: payload.questions
+    }
+  }
+  AuditLog.create = async () => ({ id: 1 })
+
+  const { response, json } = await request('/surveys', {
+    method: 'POST',
+    body: {
+      title: 'Draft Survey',
+      description: 'empty draft',
+      questions: []
+    }
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(json.success, true)
+  assert.equal(json.data.id, 11)
+  assert.equal(createdPayloads.length, 1)
+  assert.deepEqual(createdPayloads[0].questions, [])
+})
+
 test('POST /api/surveys strips non-writable settings and style fields before persistence', async () => {
   let createdPayload = null
 

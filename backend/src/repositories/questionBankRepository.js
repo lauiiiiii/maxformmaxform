@@ -35,6 +35,10 @@ const questionBankRepository = {
     return QuestionBankQuestion.create(payload, options)
   },
 
+  async updateQuestion(questionId, repoId, fields, options = {}) {
+    return QuestionBankQuestion.update(questionId, repoId, fields, options)
+  },
+
   async deleteQuestion(questionId, repoId, options = {}) {
     return QuestionBankQuestion.delete(questionId, repoId, options)
   }

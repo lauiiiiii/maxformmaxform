@@ -10,7 +10,8 @@ import {
 import { recordManagementAction, runManagementTransaction } from './activity.js'
 import { createRoleDto, MANAGEMENT_ERROR_CODES } from '../../../shared/management.contract.js'
 
-function ensureAdmin(actor) {
+function ensureAdmin(actor, options = {}) {
+  if (options.skipAdminCheck) return
   throwManagementPolicyError(getAdminPolicy(actor))
 }
 
@@ -20,8 +21,8 @@ export async function listManagedRoles({ actor }) {
   return roles.map(item => createRoleDto(item))
 }
 
-export async function createManagedRole({ actor, body = {} }) {
-  ensureAdmin(actor)
+export async function createManagedRole({ actor, body = {} }, options = {}) {
+  ensureAdmin(actor, options)
   body = ensurePlainObjectPayload(body)
 
   return runManagementTransaction(async db => {
@@ -66,11 +67,11 @@ export async function createManagedRole({ actor, body = {} }) {
     }, { db })
 
     return createRoleDto(role)
-  })
+  }, options)
 }
 
-export async function updateManagedRole({ actor, roleId, body = {} }) {
-  ensureAdmin(actor)
+export async function updateManagedRole({ actor, roleId, body = {} }, options = {}) {
+  ensureAdmin(actor, options)
   body = ensurePlainObjectPayload(body)
 
   return runManagementTransaction(async db => {
@@ -112,11 +113,11 @@ export async function updateManagedRole({ actor, roleId, body = {} }) {
     }, { db })
 
     return createRoleDto(role)
-  })
+  }, options)
 }
 
-export async function deleteManagedRole({ actor, roleId }) {
-  ensureAdmin(actor)
+export async function deleteManagedRole({ actor, roleId }, options = {}) {
+  ensureAdmin(actor, options)
 
   await runManagementTransaction(async db => {
     const role = await roleRepository.findById(roleId, { db })
@@ -141,5 +142,5 @@ export async function deleteManagedRole({ actor, roleId }) {
         entityId: role.id
       }
     }, { db })
-  })
+  }, options)
 }

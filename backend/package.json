@@ -9,6 +9,7 @@
     "dev": "node --watch ./scripts/start-dev.js",
     "dev:once": "node ./scripts/start-dev.js",
     "test": "node --test --test-concurrency=1",
+    "test:watch": "node --watch --test --test-concurrency=1",
     "db:migrate": "node scripts/db-migrate.js",
     "db:seed": "node scripts/db-seed.js",
     "db:seed:dev": "node scripts/db-seed.js",

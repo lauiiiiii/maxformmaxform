@@ -694,6 +694,21 @@ function createProviderSummary(provider) {
   }
 }
 
+function createSurveyAiAuditMeta({ provider, protocol }) {
+  const providerSummary = createProviderSummary(provider)
+  return {
+    source: 'survey.ai.generate',
+    generatedAt: new Date().toISOString(),
+    generatedBy: providerSummary.model || providerSummary.providerId || 'unknown',
+    providerId: providerSummary.providerId,
+    providerLabel: providerSummary.providerLabel,
+    model: providerSummary.model,
+    protocolVersion: protocol.version,
+    promptTemplateVersion: protocol.promptTemplate.version,
+    reviewStatus: 'draft'
+  }
+}
+
 export async function generateSurveyDraftByAi({ actor, body = {} }) {
   if (!actor?.sub) {
     throw createHttpError(401, 'UNAUTHORIZED', 'Authentication is required')
@@ -719,7 +734,8 @@ export async function generateSurveyDraftByAi({ actor, body = {} }) {
   return {
     ...generated,
     promptTemplateVersion: protocol.promptTemplate.version,
-    provider: createProviderSummary(provider)
+    provider: createProviderSummary(provider),
+    aiMeta: createSurveyAiAuditMeta({ provider, protocol })
   }
 }
 
