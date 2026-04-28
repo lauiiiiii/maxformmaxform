@@ -1,55 +1,55 @@
 <template>
-  <div class="file-page">
-    <h1>附件管理</h1>
+  <div class="file-page" data-testid="admin-files-page">
+    <h1>闄勪欢绠＄悊</h1>
     <section class="toolbar">
-      <button @click="load">刷新</button>
+      <button data-testid="files-refresh-button" @click="load">鍒锋柊</button>
     </section>
-    <table v-if="files.length" class="files">
+    <table v-if="files.length" class="files" data-testid="admin-files-table">
       <thead>
         <tr>
           <th>ID</th>
-          <th>名称</th>
-          <th>类型</th>
-          <th>大小</th>
-          <th>操作</th>
+          <th>鍚嶇О</th>
+          <th>绫诲瀷</th>
+          <th>澶у皬</th>
+          <th>鎿嶄綔</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="file in files" :key="file.id">
+        <tr v-for="file in files" :key="file.id" :data-testid="`file-row-${file.id}`">
           <td>{{ file.id }}</td>
-          <td>{{ file.name }}</td>
-          <td>{{ file.type }}</td>
-          <td>{{ file.size }}</td>
           <td>
-            <button @click="remove(file.id)">删除</button>
+            <span :data-testid="`file-name-${file.id}`">{{ file.name }}</span>
+          </td>
+          <td>
+            <span :data-testid="`file-type-${file.id}`">{{ file.type || '-' }}</span>
+          </td>
+          <td>
+            <span :data-testid="`file-size-${file.id}`">{{ file.size ?? '-' }}</span>
+          </td>
+          <td>
+            <button :data-testid="`file-delete-button-${file.id}`" @click="remove(file.id)">鍒犻櫎</button>
           </td>
         </tr>
       </tbody>
     </table>
-    <p v-else class="empty">暂无附件</p>
+    <p v-else class="empty" data-testid="admin-files-empty">鏆傛棤闄勪欢</p>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import http from '@/api/http'
+import { deleteFile, listFiles, type FileDTO } from '@/api/files'
 
-interface FileItem {
-  id: number
-  name: string
-  type?: string
-  size?: number
-}
-
-const files = ref<FileItem[]>([])
+const files = ref<FileDTO[]>([])
 
 async function load() {
-  const { data } = await http.get('/files')
-  files.value = data?.data?.list || []
+  const result = await listFiles()
+  files.value = result.list
 }
 
 async function remove(id: number) {
-  await http.delete(`/files/${id}`)
+  if (!window.confirm(`Delete file #${id}? This action cannot be undone.`)) return
+  await deleteFile(id)
   await load()
 }
 

@@ -1,7 +1,12 @@
-import bcrypt from 'bcryptjs'
 import knex from './knex.js'
 
 export async function migrate() {
+  const createdTables = {
+    users: false,
+    surveys: false,
+    files: false
+  }
+
   if (!await knex.schema.hasTable('roles')) {
     await knex.schema.createTable('roles', t => {
       t.increments('id').unsigned()
@@ -55,6 +60,7 @@ export async function migrate() {
       t.index('dept_id')
       t.index('position_id')
     })
+    createdTables.users = true
   }
 
   if (!await knex.schema.hasTable('surveys')) {
@@ -69,11 +75,17 @@ export async function migrate() {
       t.string('share_code', 20).nullable().unique()
       t.enum('status', ['draft', 'published', 'closed']).defaultTo('draft')
       t.integer('response_count').defaultTo(0)
+      t.integer('folder_id').unsigned().nullable()
+      t.datetime('deleted_at').nullable()
+      t.integer('deleted_by').unsigned().nullable()
       t.datetime('created_at').defaultTo(knex.fn.now())
       t.datetime('updated_at').defaultTo(knex.fn.now())
       t.index('creator_id')
+      t.index('folder_id')
       t.index('status')
+      t.index('deleted_at')
     })
+    createdTables.surveys = true
   }
 
   if (!await knex.schema.hasTable('answers')) {
@@ -88,6 +100,22 @@ export async function migrate() {
       t.datetime('submitted_at').defaultTo(knex.fn.now())
       t.index('survey_id')
       t.index('submitted_at')
+    })
+  }
+
+  if (!await knex.schema.hasTable('survey_results_snapshots')) {
+    await knex.schema.createTable('survey_results_snapshots', t => {
+      t.increments('id').unsigned()
+      t.integer('survey_id').unsigned().notNullable().unique()
+      t.json('payload').notNullable()
+      t.integer('answer_count').notNullable().defaultTo(0)
+      t.integer('latest_answer_id').unsigned().nullable()
+      t.datetime('latest_submitted_at').nullable()
+      t.datetime('survey_updated_at').nullable()
+      t.datetime('created_at').defaultTo(knex.fn.now())
+      t.datetime('updated_at').defaultTo(knex.fn.now())
+      t.index('survey_id')
+      t.index('updated_at')
     })
   }
 
@@ -112,6 +140,7 @@ export async function migrate() {
       t.index('answer_id')
       t.index('public_token')
     })
+    createdTables.files = true
   }
 
   if (!await knex.schema.hasTable('folders')) {
@@ -167,7 +196,163 @@ export async function migrate() {
     })
   }
 
-  if (await knex.schema.hasTable('surveys')) {
+  if (!await knex.schema.hasTable('flows')) {
+    await knex.schema.createTable('flows', t => {
+      t.increments('id').unsigned()
+      t.string('name', 100).notNullable()
+      t.string('status', 20).notNullable().defaultTo('draft')
+      t.text('description').nullable()
+      t.datetime('created_at').defaultTo(knex.fn.now())
+      t.datetime('updated_at').defaultTo(knex.fn.now())
+      t.index('status')
+    })
+  }
+
+  if (!await knex.schema.hasTable('question_bank_repos')) {
+    await knex.schema.createTable('question_bank_repos', t => {
+      t.increments('id').unsigned()
+      t.integer('creator_id').unsigned().nullable()
+      t.string('name', 100).notNullable()
+      t.text('description').nullable()
+      t.json('content').nullable()
+      t.datetime('created_at').defaultTo(knex.fn.now())
+      t.datetime('updated_at').defaultTo(knex.fn.now())
+      t.index('creator_id')
+    })
+  }
+
+  if (!await knex.schema.hasTable('question_bank_questions')) {
+    await knex.schema.createTable('question_bank_questions', t => {
+      t.increments('id').unsigned()
+      t.integer('repo_id').unsigned().notNullable()
+      t.string('title', 255).notNullable()
+      t.string('type', 50).nullable()
+      t.string('difficulty', 50).nullable()
+      t.decimal('score', 10, 2).nullable()
+      t.json('content').nullable()
+      t.datetime('created_at').defaultTo(knex.fn.now())
+      t.datetime('updated_at').defaultTo(knex.fn.now())
+      t.index('repo_id')
+    })
+  }
+
+  if (!await knex.schema.hasTable('management_ai_executions')) {
+    await knex.schema.createTable('management_ai_executions', t => {
+      t.increments('id').unsigned()
+      t.integer('actor_id').unsigned().notNullable()
+      t.string('idempotency_key', 120).notNullable()
+      t.string('batch_id', 120).nullable()
+      t.integer('parent_execution_id').unsigned().nullable()
+      t.string('step_id', 120).nullable()
+      t.integer('step_index').unsigned().nullable()
+      t.string('action', 120).notNullable()
+      t.string('request_hash', 64).notNullable()
+      t.string('status', 20).notNullable().defaultTo('pending')
+      t.json('request_payload').nullable()
+      t.json('response_payload').nullable()
+      t.string('error_code', 80).nullable()
+      t.string('error_stage', 40).nullable()
+      t.string('error_class', 60).nullable()
+      t.boolean('retryable').nullable()
+      t.string('failed_step_id', 120).nullable()
+      t.string('failed_action', 120).nullable()
+      t.text('error_message').nullable()
+      t.datetime('created_at').defaultTo(knex.fn.now())
+      t.datetime('updated_at').defaultTo(knex.fn.now())
+      t.unique(['actor_id', 'idempotency_key'])
+      t.index('actor_id')
+      t.index('batch_id')
+      t.index('parent_execution_id')
+      t.index('step_id')
+      t.index('action')
+      t.index('status')
+      t.index('created_at')
+    })
+  }
+
+  if (!await knex.schema.hasTable('system_configs')) {
+    await knex.schema.createTable('system_configs', t => {
+      t.increments('id').unsigned()
+      t.string('config_key', 100).notNullable().unique()
+      t.json('config_value').nullable()
+      t.integer('updated_by').unsigned().nullable()
+      t.datetime('created_at').defaultTo(knex.fn.now())
+      t.datetime('updated_at').defaultTo(knex.fn.now())
+      t.index('config_key')
+      t.index('updated_by')
+    })
+  }
+
+  if (await knex.schema.hasTable('question_bank_questions')) {
+    if (!await knex.schema.hasColumn('question_bank_questions', 'content')) {
+      await knex.schema.alterTable('question_bank_questions', t => {
+        t.json('content').nullable()
+      })
+    }
+  }
+
+  if (await knex.schema.hasTable('question_bank_repos')) {
+    if (!await knex.schema.hasColumn('question_bank_repos', 'creator_id')) {
+      await knex.schema.alterTable('question_bank_repos', t => {
+        t.integer('creator_id').unsigned().nullable().index()
+      })
+    }
+    if (!await knex.schema.hasColumn('question_bank_repos', 'content')) {
+      await knex.schema.alterTable('question_bank_repos', t => {
+        t.json('content').nullable()
+      })
+    }
+  }
+
+  if (await knex.schema.hasTable('management_ai_executions')) {
+    if (!await knex.schema.hasColumn('management_ai_executions', 'batch_id')) {
+      await knex.schema.alterTable('management_ai_executions', t => {
+        t.string('batch_id', 120).nullable().index()
+      })
+    }
+    if (!await knex.schema.hasColumn('management_ai_executions', 'parent_execution_id')) {
+      await knex.schema.alterTable('management_ai_executions', t => {
+        t.integer('parent_execution_id').unsigned().nullable().index()
+      })
+    }
+    if (!await knex.schema.hasColumn('management_ai_executions', 'step_id')) {
+      await knex.schema.alterTable('management_ai_executions', t => {
+        t.string('step_id', 120).nullable().index()
+      })
+    }
+    if (!await knex.schema.hasColumn('management_ai_executions', 'step_index')) {
+      await knex.schema.alterTable('management_ai_executions', t => {
+        t.integer('step_index').unsigned().nullable()
+      })
+    }
+    if (!await knex.schema.hasColumn('management_ai_executions', 'error_stage')) {
+      await knex.schema.alterTable('management_ai_executions', t => {
+        t.string('error_stage', 40).nullable()
+      })
+    }
+    if (!await knex.schema.hasColumn('management_ai_executions', 'error_class')) {
+      await knex.schema.alterTable('management_ai_executions', t => {
+        t.string('error_class', 60).nullable()
+      })
+    }
+    if (!await knex.schema.hasColumn('management_ai_executions', 'retryable')) {
+      await knex.schema.alterTable('management_ai_executions', t => {
+        t.boolean('retryable').nullable()
+      })
+    }
+    if (!await knex.schema.hasColumn('management_ai_executions', 'failed_step_id')) {
+      await knex.schema.alterTable('management_ai_executions', t => {
+        t.string('failed_step_id', 120).nullable()
+      })
+    }
+    if (!await knex.schema.hasColumn('management_ai_executions', 'failed_action')) {
+      await knex.schema.alterTable('management_ai_executions', t => {
+        t.string('failed_action', 120).nullable()
+      })
+    }
+  }
+
+  if (!createdTables.surveys && await knex.schema.hasTable('surveys')) {
     if (!await knex.schema.hasColumn('surveys', 'folder_id')) {
       await knex.schema.alterTable('surveys', t => {
         t.integer('folder_id').unsigned().nullable().index()
@@ -185,7 +370,7 @@ export async function migrate() {
     }
   }
 
-  if (await knex.schema.hasTable('users')) {
+  if (!createdTables.users && await knex.schema.hasTable('users')) {
     if (!await knex.schema.hasColumn('users', 'position_id')) {
       await knex.schema.alterTable('users', t => {
         t.integer('position_id').unsigned().nullable().index()
@@ -193,7 +378,7 @@ export async function migrate() {
     }
   }
 
-  if (await knex.schema.hasTable('files')) {
+  if (!createdTables.files && await knex.schema.hasTable('files')) {
     if (!await knex.schema.hasColumn('files', 'survey_id')) {
       await knex.schema.alterTable('files', t => {
         t.integer('survey_id').unsigned().nullable().index()
@@ -222,47 +407,4 @@ export async function migrate() {
   }
 
   console.log('Database schema ensured')
-}
-
-export async function seed() {
-  let adminRole = await knex('roles').where('code', 'admin').first()
-  if (!adminRole) {
-    await knex('roles').insert([
-      { name: '管理员', code: 'admin', permissions: JSON.stringify(['*']) },
-      { name: '普通用户', code: 'user', permissions: JSON.stringify(['survey:create', 'survey:edit', 'survey:view', 'answer:view']) }
-    ])
-    console.log('Default roles seeded')
-    adminRole = await knex('roles').where('code', 'admin').first()
-  }
-
-  const userRole = await knex('roles').where('code', 'user').first()
-  const passwordHash = await bcrypt.hash('123456', 10)
-  const accounts = [
-    { username: 'admin', email: 'admin@example.com', role_id: adminRole?.id },
-    { username: 'test1', email: 'test1@example.com', role_id: userRole?.id }
-  ]
-
-  for (const account of accounts) {
-    const existing = await knex('users').where('username', account.username).first()
-    const payload = {
-      email: account.email,
-      role_id: account.role_id,
-      password: passwordHash,
-      is_active: true,
-      updated_at: knex.fn.now()
-    }
-
-    if (existing) {
-      await knex('users').where('id', existing.id).update(payload)
-      continue
-    }
-
-    await knex('users').insert({
-      username: account.username,
-      ...payload,
-      created_at: knex.fn.now()
-    })
-  }
-
-  console.log('Default test users ensured')
 }

@@ -2,6 +2,10 @@ import knex from '../db/knex.js'
 
 const TABLE = 'messages'
 
+function getDb(options = {}) {
+  return options.db || knex
+}
+
 function toDto(row) {
   if (!row) return null
   return {
@@ -19,8 +23,9 @@ function toDto(row) {
 }
 
 const Message = {
-  async create({ recipient_id, type = 'system', level = 'info', title, content, entity_type, entity_id, created_by }) {
-    const [id] = await knex(TABLE).insert({
+  async create({ recipient_id, type = 'system', level = 'info', title, content, entity_type, entity_id, created_by }, options = {}) {
+    const db = getDb(options)
+    const [id] = await db(TABLE).insert({
       recipient_id,
       type,
       level,
@@ -30,11 +35,12 @@ const Message = {
       entity_id: entity_id ?? null,
       created_by: created_by ?? null
     })
-    return Message.findById(id, recipient_id)
+    return Message.findById(id, recipient_id, options)
   },
 
-  async findById(id, recipient_id) {
-    let q = knex(TABLE).where('id', id)
+  async findById(id, recipient_id, options = {}) {
+    const db = getDb(options)
+    let q = db(TABLE).where('id', id)
     if (recipient_id !== undefined) q = q.andWhere('recipient_id', recipient_id)
     const row = await q.first()
     return toDto(row)
@@ -45,12 +51,16 @@ const Message = {
     if (unread !== undefined) q = q.andWhere('is_read', unread)
     if (Array.isArray(types) && types.length) q = q.whereIn('type', types)
 
+    const total = await q.clone().count('* as cnt').first().then(row => Number(row?.cnt || 0))
     const rows = await q
       .orderBy('created_at', 'desc')
       .limit(pageSize)
       .offset((page - 1) * pageSize)
 
-    return rows.map(toDto)
+    return {
+      total,
+      list: rows.map(toDto)
+    }
   },
 
   async markRead(id, recipient_id) {

@@ -1,10 +1,10 @@
 <template>
-  <div class="answer-page">
-    <header class="page-header">
+  <div class="answer-page" data-testid="answer-management-page">
+    <header class="page-header" data-testid="answer-management-header">
       <div>
         <p class="eyebrow">答卷管理</p>
-        <h1>{{ surveyHeading }}</h1>
-        <p class="header-meta">
+        <h1 data-testid="answer-heading">{{ surveyHeading }}</h1>
+        <p class="header-meta" data-testid="answer-header-meta">
           <span v-if="activeSurveyId">问卷 ID：{{ activeSurveyId }}</span>
           <span v-if="activeSurveyId">共 {{ total }} 份答卷</span>
         </p>

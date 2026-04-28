@@ -3,7 +3,7 @@
   仅管理当前用户自己的问卷、数据和个人信息。
 -->
 <template>
-  <div class="user-dashboard-shell">
+  <div class="user-dashboard-shell" data-testid="user-dashboard-page">
     <!-- 顶部导航条 -->
     <header class="topbar">
       <div class="tb-left">
@@ -53,9 +53,10 @@
     </header>
     <div class="survey-list-page">
     <aside class="sidebar">
-      <button class="create-btn" @click="createSurvey">+ 创建问卷</button>
+      <button v-if="activeMenu !== 'repo'" class="create-btn" @click="createSurvey">+ 创建问卷</button>
       <ul class="nav">
         <li :class="{active: activeMenu==='all'}" @click="setMenu('all')">全部问卷</li>
+        <li :class="{active: activeMenu==='repo'}" @click="setMenu('repo')">题库管理</li>
         <li :class="{active: activeMenu==='trash'}" @click="setMenu('trash')">回收站</li>
         <li :class="{active: activeMenu==='folder'}" @click="setMenu('folder')">文件夹</li>
         <li :class="{active: activeMenu==='team'}" @click="setMenu('team')">协作</li>
@@ -334,6 +335,9 @@
               </el-tabs>
             </div>
           </template>
+          <template v-else-if="activeMenu==='repo'">
+            <QuestionBankPage />
+          </template>
           <template v-else-if="delayedLoading">
             <div class="skeleton-wrapper" aria-label="加载中">
               <div class="skeleton-card" v-for="n in 3" :key="n">
@@ -591,25 +595,31 @@
 </template>
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
-import { useRouter, onBeforeRouteUpdate } from 'vue-router'
+import { storeToRefs } from 'pinia'
+import { useRouter, useRoute, onBeforeRouteUpdate } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Bell } from '@element-plus/icons-vue'
+import QuestionBankPage from '@/views/admin/Repos.vue'
 import { listSurveys, deleteSurvey as apiDeleteSurvey, publishSurvey, closeSurvey, getSurvey, createSurvey as apiCreateSurvey, moveSurvey, listTrash, restoreSurvey, forceDeleteSurvey, clearTrash } from '@/api/surveys'
 import { listFolders, listAllFolders, createFolder, renameFolder, deleteFolder, type FolderDTO } from '@/api/folders'
 import { listDepts, createDept, updateDept, deleteDept } from '@/api/depts'
 import { fetchUsers, createUser, updateUser, updatePassword, enableUser, disableUser, deleteUser, importUsers } from '@/api/userAdmin'
 import http from '@/api/http'
+import { useAuthStore } from '@/stores/auth'
 import type { Dept, User } from '@/types/user'
 // 已移除编码逻辑，直接使用数字ID
 const router = useRouter()
+const route = useRoute()
+const authStore = useAuthStore()
+const { user: currentUser, username, isAdmin, roleLabel: authRoleLabel, identityCode: authIdentityCode } = storeToRefs(authStore)
 // 顶栏品牌图片：若存在 public/brand-logo.png 则优先显示；否则回退内联图标
 const brandImgSrc = '/brand-logo.png'
 const brandImgError = ref(false)
 // 顶部导航激活状态
 const topNav = ref<'workspace'|'contacts'|'templates'|'admin'>('workspace')
-const displayUser = computed(()=> localStorage.getItem('rememberUser') || '用户')
+const displayUser = computed(() => username.value || localStorage.getItem('rememberUser') || '用户')
 // 避免在模板中直接访问 localStorage，改为受控的计算属性
-const isAdminUser = computed(() => (localStorage.getItem('role') || 'user') === 'admin')
+const isAdminUser = computed(() => isAdmin.value)
 const goTopNav = (k: 'workspace'|'contacts'|'templates'|'admin') => {
   topNav.value = k
   if (k === 'workspace') router.push('/user-dashboard')
@@ -621,7 +631,7 @@ const goTopNav = (k: 'workspace'|'contacts'|'templates'|'admin') => {
 // 右上角用户菜单
 const handleUserCommand = (cmd: 'account'|'password'|'logout') => {
   if (cmd === 'logout') {
-    localStorage.removeItem('token')
+    authStore.logout()
     router.push('/login')
   } else if (cmd === 'account') {
     setMenu('profile')
@@ -637,7 +647,7 @@ const loading = ref(false)
 const delayedLoading = ref(false)
 let loadingTimer: number | null = null
 const surveys = ref<any[]>([])
-const activeMenu = ref('all')
+const activeMenu = ref(String(route.query.tab || 'all'))
 // 文件夹相关状态
 const allFolders = ref<FolderDTO[]>([])
 const childFolders = ref<FolderDTO[]>([])
@@ -947,6 +957,13 @@ const handleTeamAction = async (action: 'create' | 'join') => {
 }
 const setMenu = async (menu:string) => {
   activeMenu.value = menu
+  const nextQuery = { ...route.query }
+  if (menu === 'all') {
+    delete nextQuery.tab
+  } else {
+    nextQuery.tab = menu
+  }
+  router.replace({ path: '/user-dashboard', query: nextQuery })
   if (menu === 'folder') {
     // 点击“文件夹”时，重置为根目录（全部）
     await enterFolder(null)
@@ -954,6 +971,8 @@ const setMenu = async (menu:string) => {
     await loadTrash()
   } else if (menu === 'team' || menu === 'department') {
     await loadOrgData()
+  } else if (menu === 'repo' || menu === 'profile') {
+    return
   } else {
     await fetchSurveys()
   }
@@ -975,7 +994,9 @@ const refreshMessages = async () => { await loadMessages(msgUnreadOnly.value) }
 const loadUnreadCount = async () => {
   try {
     const { data } = await http.get('/messages', { params: { unread: 1, types: 'audit,system' } })
-    unreadCount.value = (data?.data || []).length
+    const payload = data?.data
+    const list = Array.isArray(payload) ? payload : (payload?.list || [])
+    unreadCount.value = list.length
   } catch {}
 }
 const loadMessages = async (unreadOnly = true) => {
@@ -984,7 +1005,8 @@ const loadMessages = async (unreadOnly = true) => {
     const base = { types: 'audit,system' }
     const params = unreadOnly ? { ...base, unread: 1 } : base
     const { data } = await http.get('/messages', { params })
-    const list = (data?.data || [])
+    const payload = data?.data
+    const list = Array.isArray(payload) ? payload : (payload?.list || [])
     const getTime = (x:any) => {
       const t = Date.parse(x?.createdAt || x?.time || '')
       return isNaN(t) ? (Number(x?.id)||0) : t
@@ -1082,12 +1104,26 @@ const fetchSurveys = async () => {
 }
 
 onMounted(async () => {
+  if (route.query.tab && activeMenu.value !== String(route.query.tab)) {
+    activeMenu.value = String(route.query.tab)
+  }
   await loadUnreadCount()
   if (msgTimer) { clearInterval(msgTimer); msgTimer = null }
   msgTimer = window.setInterval(loadUnreadCount, 30000) // 30s 轮询未读数
 })
 onUnmounted(() => { if (msgTimer) { clearInterval(msgTimer); msgTimer = null } })
-onMounted(fetchSurveys)
+onMounted(async () => {
+  if (activeMenu.value === 'repo' || activeMenu.value === 'profile') return
+  if (activeMenu.value === 'trash') {
+    await loadTrash()
+    return
+  }
+  if (activeMenu.value === 'team' || activeMenu.value === 'department') {
+    await loadOrgData()
+    return
+  }
+  await fetchSurveys()
+})
 onMounted(async ()=>{ try { allFolders.value = await listAllFolders() } catch {} })
 onMounted(async () => { if (isAdminUser.value) await loadOrgData() })
 
@@ -1112,12 +1148,23 @@ const enterFolder = async (id: number | null) => {
 
 // 当从编辑页返回或切换路由时，刷新列表
 onBeforeRouteUpdate((to, from, next) => {
+  const nextMenu = String(to.query.tab || 'all')
+  activeMenu.value = nextMenu
+  if (nextMenu === 'repo' || nextMenu === 'profile') return next()
+  if (nextMenu === 'trash') {
+    loadTrash().finally(() => next())
+    return
+  }
+  if (nextMenu === 'team' || nextMenu === 'department') {
+    loadOrgData().finally(() => next())
+    return
+  }
   fetchSurveys().finally(() => next())
 })
 
 // 页面重新获得焦点时自动刷新
 const handleVisibility = () => {
-  if (document.visibilityState === 'visible') fetchSurveys()
+  if (document.visibilityState === 'visible' && !['repo', 'profile'].includes(activeMenu.value)) fetchSurveys()
 }
 onMounted(() => document.addEventListener('visibilitychange', handleVisibility))
 onUnmounted(() => document.removeEventListener('visibilitychange', handleVisibility))
@@ -1483,14 +1530,11 @@ const changePwd = () => {
 // 账号信息展示字段（示例：可从 /api/auth/me 替换为真实数据）
 const enterpriseName = computed(() => localStorage.getItem('enterpriseName') || '——')
 const departmentName = computed(() => localStorage.getItem('departmentName') || '——')
-// 登录时后端若返回 role，可在 Login.vue 存储 localStorage.role
-const roleLabel = computed(() => {
-  const r = localStorage.getItem('role') || 'user'
-  return r === 'admin' ? '管理员' : '普通用户'
-})
-const identityCode = computed(() => localStorage.getItem('identityCode') || (roleLabel.value === '管理员' ? 'PROJECT_ADMIN' : 'USER'))
-const createdAtDisp = computed(() => localStorage.getItem('createdAt') || '--')
-const lastLoginAtDisp = computed(() => localStorage.getItem('lastLoginAt') || '--')
+// 权限展示统一从 auth store 输出
+const roleLabel = computed(() => authRoleLabel.value)
+const identityCode = computed(() => authIdentityCode.value)
+const createdAtDisp = computed(() => currentUser.value?.created_at || currentUser.value?.createdAt || localStorage.getItem('createdAt') || '--')
+const lastLoginAtDisp = computed(() => currentUser.value?.last_login_at || currentUser.value?.lastLoginAt || localStorage.getItem('lastLoginAt') || '--')
 </script>
 <style scoped>
 .user-dashboard-shell { display:flex; flex-direction:column; min-height:100vh; }

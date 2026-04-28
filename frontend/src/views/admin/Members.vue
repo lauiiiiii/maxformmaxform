@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div data-testid="admin-members-page">
     <h3>成员管理</h3>
     <div class="toolbar">
       <el-input v-model="keyword" placeholder="搜索用户名" style="width: 240px" />
@@ -87,6 +87,7 @@ const resetPwd = async (id: number) => {
 }
 
 const remove = async (id: number) => {
+  if (!window.confirm(`确认删除成员 #${id} 吗？该操作不可恢复。`)) return
   await deleteUser(id)
   await load()
 }

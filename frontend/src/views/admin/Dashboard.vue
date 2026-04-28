@@ -1,5 +1,5 @@
 <template>
-  <div class="admin-overview">
+  <div class="admin-overview" data-testid="admin-overview-page">
     <h2 class="title">总览</h2>
     <div class="grid">
       <el-card class="card"><div class="num">--</div><div class="lbl">问卷总数</div></el-card>

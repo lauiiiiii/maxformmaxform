@@ -1,7 +1,6 @@
 import app from './app.js'
 import config from './src/config/index.js'
 import knex from './src/db/knex.js'
-import { migrate, seed } from './src/db/migrate.js'
 
 async function start() {
   try {
@@ -12,11 +11,16 @@ async function start() {
     process.exit(1)
   }
 
-  await migrate()
-  await seed()
+  const requestedPort = config.port
+  const server = app.listen(requestedPort, () => {
+    const address = server.address()
+    const actualPort = typeof address === 'object' && address ? address.port : requestedPort
+    console.log(`Server running: http://127.0.0.1:${actualPort}`)
+  })
 
-  const server = app.listen(config.port, () => {
-    console.log(`Server running: http://127.0.0.1:${config.port}`)
+  server.on('error', error => {
+    console.error('Server failed to start:', error)
+    process.exit(1)
   })
 
   const shutdown = async (signal) => {

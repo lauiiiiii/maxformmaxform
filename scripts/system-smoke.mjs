@@ -14,24 +14,107 @@ const envDefaults = {
   DB_USER: 'root',
   DB_PASSWORD: '123456',
   DB_NAME: 'survey_system',
-  FRONTEND_URL: 'http://127.0.0.1:63000',
-  PORT: '63102'
+  FRONTEND_URL: 'http://127.0.0.1:63000'
 }
 
+function isTruthy(value) {
+  return ['1', 'true', 'yes', 'on'].includes(String(value || '').trim().toLowerCase())
+}
+
+const runId = `${Date.now()}-${process.pid}-${Math.random().toString(36).slice(2, 8)}`
+
+function sanitizeIdentifier(value) {
+  return String(value || '')
+    .replace(/[^a-zA-Z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase()
+}
+
+function buildSmokeDatabaseName(baseName, id) {
+  const sanitizedBase = sanitizeIdentifier(baseName) || 'survey_system'
+  const suffix = `smoke_${sanitizeIdentifier(id) || 'run'}`
+  const maxBaseLength = Math.max(1, 64 - suffix.length - 1)
+  return `${sanitizedBase.slice(0, maxBaseLength)}_${suffix}`
+}
+
+function quoteMysqlIdentifier(value) {
+  return `\`${String(value).replace(/`/g, '``')}\``
+}
+
+async function resolveSmokePort(runtimeEnv) {
+  if (runtimeEnv.PORT) return String(runtimeEnv.PORT)
+  return '0'
+}
+
+const runtimeEnv = { ...process.env }
 for (const [key, value] of Object.entries(envDefaults)) {
-  if (!process.env[key]) process.env[key] = value
+  if (!runtimeEnv[key]) runtimeEnv[key] = value
 }
 
-const env = { ...process.env }
-const [{ migrate, seed }, { default: knex }, { default: User }, { default: Role }] = await Promise.all([
+const useSharedSmokeDb = isTruthy(runtimeEnv.SMOKE_SHARED_DB)
+const keepSmokeDb = isTruthy(runtimeEnv.SMOKE_KEEP_DB)
+const baseDbName = runtimeEnv.DB_NAME || envDefaults.DB_NAME
+const smokeDbName = useSharedSmokeDb ? baseDbName : buildSmokeDatabaseName(baseDbName, runId)
+runtimeEnv.DB_NAME = smokeDbName
+runtimeEnv.PORT = await resolveSmokePort(runtimeEnv)
+
+Object.assign(process.env, runtimeEnv)
+
+const env = { ...runtimeEnv }
+let activePort = env.PORT === '0' ? null : env.PORT
+const [{ createMysqlKnex }] = await Promise.all([
+  import('../backend/src/db/createKnex.js')
+])
+
+let smokeAdminKnex
+if (!useSharedSmokeDb) {
+  smokeAdminKnex = createMysqlKnex({
+    host: env.DB_HOST,
+    port: Number(env.DB_PORT),
+    user: env.DB_USER,
+    password: env.DB_PASSWORD,
+    database: 'mysql',
+    pool: { min: 0, max: 2 }
+  })
+  await smokeAdminKnex.raw(
+    `CREATE DATABASE IF NOT EXISTS ${quoteMysqlIdentifier(smokeDbName)} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+  )
+}
+
+let knex
+let User
+let Role
+let migrate
+let ensureBaseRoles
+
+;([
+  { migrate },
+  { ensureBaseRoles },
+  { default: knex },
+  { default: User },
+  { default: Role }
+] = await Promise.all([
   import('../backend/src/db/migrate.js'),
+  import('../backend/src/db/seed.js'),
   import('../backend/src/db/knex.js'),
   import('../backend/src/models/User.js'),
   import('../backend/src/models/Role.js')
-])
+]))
 
-const baseUrl = `http://127.0.0.1:${env.PORT}`
-const runId = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)
+function getBaseUrl() {
+  if (!activePort) {
+    throw new Error('backend port has not been resolved yet')
+  }
+  return `http://127.0.0.1:${activePort}`
+}
+
+function updateActivePortFromLog(output) {
+  const match = String(output).match(/Server running: http:\/\/127\.0\.0\.1:(\d+)/)
+  if (match?.[1]) {
+    activePort = match[1]
+  }
+}
+
 const adminUsername = `sys_admin_${runId}`
 const adminPassword = `Admin!${runId}`
 const basicUsername = `sys_user_${runId}`
@@ -39,6 +122,7 @@ const importedUsername = `sys_import_${runId}`
 const positionCode = `smoke-pos-${runId}`
 const updatedPositionCode = `${positionCode}-v2`
 const results = []
+const deletedFileIds = new Set()
 
 const SAFARI_IOS_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
 const CHROME_WINDOWS_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36'
@@ -65,7 +149,7 @@ async function request(pathname, { method = 'GET', token, body, expectedStatus, 
     }
   }
 
-  const response = await fetch(`${baseUrl}${pathname}`, {
+  const response = await fetch(`${getBaseUrl()}${pathname}`, {
     method,
     headers: requestHeaders,
     body: requestBody
@@ -215,9 +299,26 @@ function countListHas(list, label, count) {
   return Array.isArray(list) && list.some(item => item?.label === label && Number(item?.value) === Number(count))
 }
 
+function markFileDeleted(fileId) {
+  const numericId = Number(fileId)
+  if (Number.isFinite(numericId) && numericId > 0) deletedFileIds.add(numericId)
+}
+
+async function deleteManagedFile(fileId, token) {
+  const numericId = Number(fileId)
+  if (!Number.isFinite(numericId) || numericId <= 0 || deletedFileIds.has(numericId)) return
+
+  await request(`/api/files/${numericId}`, {
+    method: 'DELETE',
+    token,
+    expectedStatus: 200
+  })
+  markFileDeleted(numericId)
+}
+
 async function ensureAdminUser() {
   await migrate()
-  await seed()
+  await ensureBaseRoles()
 
   let user = await User.findByUsername(adminUsername)
   if (!user) {
@@ -237,8 +338,12 @@ async function waitForHealth(serverProcess) {
     if (serverProcess.exitCode !== null) {
       throw new Error(`backend server exited early with code ${serverProcess.exitCode}`)
     }
+    if (!activePort) {
+      await delay(250)
+      continue
+    }
     try {
-      const response = await fetch(`${baseUrl}/health`)
+      const response = await fetch(`${getBaseUrl()}/health`)
       const json = await response.json()
       if (json?.status === 'OK') return
     } catch {}
@@ -264,7 +369,11 @@ async function main() {
     await ensureAdminUser()
 
     server = spawnServer()
-    server.stdout.on('data', chunk => stdout.push(String(chunk)))
+    server.stdout.on('data', chunk => {
+      const output = String(chunk)
+      stdout.push(output)
+      updateActivePortFromLog(output)
+    })
     server.stderr.on('data', chunk => stderr.push(String(chunk)))
 
     await waitForHealth(server)
@@ -296,7 +405,8 @@ async function main() {
       expectedStatus: 200
     })
     const basicUserToken = response.json?.data?.token
-    record('basic user register', !!basicUserToken, { status: response.status })
+    const basicUserId = response.json?.data?.user?.id
+    record('basic user register', !!basicUserToken && Number(basicUserId) > 0, { status: response.status, userId: basicUserId })
 
     response = await request('/api/auth/me', {
       token: basicUserToken,
@@ -395,7 +505,11 @@ async function main() {
       token: adminToken,
       expectedStatus: 409
     })
-    record('parent folder delete guard', response.json?.error?.code === 'FOLDER_HAS_CHILDREN', { status: response.status })
+    record(
+      'parent folder delete guard',
+      ['FOLDER_HAS_CHILDREN', 'MGMT_FOLDER_HAS_CHILDREN'].includes(response.json?.error?.code),
+      { status: response.status, code: response.json?.error?.code }
+    )
 
     response = await request('/api/folders', {
       method: 'POST',
@@ -506,6 +620,19 @@ async function main() {
     const analyticsSurveyId = response.json?.data?.id
     const analyticsShareCode = response.json?.data?.share_code || response.json?.data?.shareId
     record('create analytics survey', !!analyticsSurveyId, { status: response.status, surveyId: analyticsSurveyId })
+
+    response = await request('/api/surveys?page=1&pageSize=20', {
+      token: adminToken,
+      expectedStatus: 200
+    })
+    const surveyList = response.json?.data
+    record(
+      'list surveys',
+      Array.isArray(surveyList?.list) &&
+      surveyList.list.some(item => Number(item.id) === Number(analyticsSurveyId)) &&
+      Number(surveyList?.total) >= 1,
+      { status: response.status, total: surveyList?.total }
+    )
 
     response = await request(`/api/surveys/${analyticsSurveyId}/folder`, {
       method: 'PUT',
@@ -653,6 +780,23 @@ async function main() {
       { status: response.status, total: answerList?.total }
     )
 
+    response = await request(`/api/answers/count?survey_id=${analyticsSurveyId}`, {
+      token: adminToken,
+      expectedStatus: 200
+    })
+    record('count survey answers', Number(response.json?.data?.count) >= 2, { status: response.status, count: response.json?.data?.count })
+
+    response = await request(`/api/answers/${analyticsAnswerAId}`, {
+      token: adminToken,
+      expectedStatus: 200
+    })
+    record(
+      'read answer detail',
+      Number(response.json?.data?.id) === Number(analyticsAnswerAId) &&
+      Number(response.json?.data?.survey_id) === Number(analyticsSurveyId),
+      { status: response.status, answerId: response.json?.data?.id }
+    )
+
     let binaryResponse = await request('/api/answers/download/survey', {
       method: 'POST',
       token: adminToken,
@@ -750,12 +894,43 @@ async function main() {
       { status: response.status }
     )
 
+    response = await request('/api/answers/batch', {
+      method: 'DELETE',
+      token: adminToken,
+      body: { ids: [analyticsAnswerAId] },
+      expectedStatus: 200
+    })
+    record('delete answer batch', Number(response.json?.data?.deleted) === 1, { status: response.status, deleted: response.json?.data?.deleted })
+    markFileDeleted(analyticsUploadA?.id)
+
+    response = await request(`/api/answers/count?survey_id=${analyticsSurveyId}`, {
+      token: adminToken,
+      expectedStatus: 200
+    })
+    record('answer count sync after delete', Number(response.json?.data?.count) === 1, { status: response.status, count: response.json?.data?.count })
+
+    response = await request(`/api/surveys/${analyticsSurveyId}/results`, {
+      token: adminToken,
+      expectedStatus: 200
+    })
+    record(
+      'results sync after delete',
+      Number(response.json?.data?.totalSubmissions) === 1 &&
+      Number(response.json?.data?.total) === 1,
+      { status: response.status, total: response.json?.data?.total }
+    )
+
     response = await request('/api/messages?types=audit,system', {
       token: adminToken,
       expectedStatus: 200
     })
-    const messages = response.json?.data || []
-    record('list messages', Array.isArray(messages) && messages.length > 0, { status: response.status, count: messages.length })
+    const messagePage = response.json?.data || {}
+    const messages = Array.isArray(messagePage?.list) ? messagePage.list : []
+    record(
+      'list messages',
+      messages.length > 0 && Number(messagePage?.total) >= messages.length,
+      { status: response.status, count: messages.length, total: messagePage?.total }
+    )
 
     if (messages.length > 0) {
       const firstMessageId = messages[0].id
@@ -771,7 +946,11 @@ async function main() {
       token: adminToken,
       expectedStatus: 200
     })
-    record('list audits', Array.isArray(response.json?.data) && response.json.data.length > 0, { status: response.status, total: response.json?.total })
+    record(
+      'list audits',
+      Array.isArray(response.json?.data?.list) && response.json.data.list.length > 0 && Number(response.json?.data?.total) >= 1,
+      { status: response.status, total: response.json?.data?.total }
+    )
 
     response = await request(`/api/surveys/${analyticsSurveyId}`, {
       method: 'DELETE',
@@ -784,8 +963,14 @@ async function main() {
       token: adminToken,
       expectedStatus: 200
     })
-    const trashList = response.json?.data || []
-    record('list trash', Array.isArray(trashList) && trashList.some(item => Number(item.id) === Number(analyticsSurveyId)), { status: response.status, count: trashList.length })
+    const trashList = response.json?.data
+    record(
+      'list trash',
+      Array.isArray(trashList?.list) &&
+      trashList.list.some(item => Number(item.id) === Number(analyticsSurveyId)) &&
+      Number(trashList?.total) >= 1,
+      { status: response.status, count: trashList?.total }
+    )
 
     response = await request(`/api/surveys/${analyticsSurveyId}/restore`, {
       method: 'POST',
@@ -793,6 +978,23 @@ async function main() {
       expectedStatus: 200
     })
     record('restore analytics survey', Number(response.json?.data?.id) === Number(analyticsSurveyId) && !response.json?.data?.deletedAt, { status: response.status })
+
+    response = await request(`/api/surveys/${analyticsSurveyId}/close`, {
+      method: 'POST',
+      token: adminToken,
+      expectedStatus: 200
+    })
+    record('close analytics survey', response.json?.data?.status === 'closed', { status: response.status })
+
+    response = await request(`/api/surveys/${analyticsSurveyId}/responses`, {
+      method: 'POST',
+      body: {
+        clientSubmissionToken: `analytics-${runId}-closed`,
+        answers: [{ questionId: 1, value: 'yes' }]
+      },
+      expectedStatus: 400
+    })
+    record('closed survey blocks submissions', response.json?.error?.code === 'NOT_PUBLISHED', { status: response.status })
 
     response = await request('/api/surveys', {
       method: 'POST',
@@ -821,31 +1023,11 @@ async function main() {
     })
     record('trash cleanup survey delete', !!response.json?.data?.deletedAt, { status: response.status })
 
-    await request(`/api/files/${uploadGuardFileA?.id}`, {
-      method: 'DELETE',
-      token: adminToken,
-      expectedStatus: 200
-    })
-    await request(`/api/files/${uploadGuardFileB?.id}`, {
-      method: 'DELETE',
-      token: adminToken,
-      expectedStatus: 200
-    })
-    await request(`/api/files/${analyticsUploadA?.id}`, {
-      method: 'DELETE',
-      token: adminToken,
-      expectedStatus: 200
-    })
-    await request(`/api/files/${analyticsUploadB1?.id}`, {
-      method: 'DELETE',
-      token: adminToken,
-      expectedStatus: 200
-    })
-    await request(`/api/files/${analyticsUploadB2?.id}`, {
-      method: 'DELETE',
-      token: adminToken,
-      expectedStatus: 200
-    })
+    await deleteManagedFile(uploadGuardFileA?.id, adminToken)
+    await deleteManagedFile(uploadGuardFileB?.id, adminToken)
+    await deleteManagedFile(analyticsUploadA?.id, adminToken)
+    await deleteManagedFile(analyticsUploadB1?.id, adminToken)
+    await deleteManagedFile(analyticsUploadB2?.id, adminToken)
     await request(`/api/surveys/${uploadValidationSurveyId}`, {
       method: 'DELETE',
       token: adminToken,
@@ -896,7 +1078,7 @@ async function main() {
     })
     record('imported member dept cleared', response.json?.data?.dept_id == null, { status: response.status })
 
-    await request(`/api/users/${basicUsername}`, {
+    await request(`/api/users/${basicUserId}`, {
       method: 'DELETE',
       token: adminToken,
       expectedStatus: 200
@@ -923,7 +1105,9 @@ async function main() {
         dbHost: env.DB_HOST,
         dbPort: env.DB_PORT,
         dbName: env.DB_NAME,
-        port: env.PORT
+        port: activePort || env.PORT,
+        isolatedDb: !useSharedSmokeDb,
+        keepDb: keepSmokeDb
       },
       passed,
       failed,
@@ -938,7 +1122,9 @@ async function main() {
         dbHost: env.DB_HOST,
         dbPort: env.DB_PORT,
         dbName: env.DB_NAME,
-        port: env.PORT
+        port: activePort || env.PORT,
+        isolatedDb: !useSharedSmokeDb,
+        keepDb: keepSmokeDb
       },
       error: String(error),
       results,
@@ -955,7 +1141,18 @@ async function main() {
       await delay(1000)
       if (server.exitCode === null) server.kill('SIGKILL')
     }
-    await knex.destroy()
+    if (knex) {
+      await knex.destroy()
+    }
+    if (smokeAdminKnex) {
+      try {
+        if (!keepSmokeDb) {
+          await smokeAdminKnex.raw(`DROP DATABASE IF EXISTS ${quoteMysqlIdentifier(smokeDbName)}`)
+        }
+      } finally {
+        await smokeAdminKnex.destroy()
+      }
+    }
   }
 }
 

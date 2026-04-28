@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div data-testid="admin-roles-page">
     <h3>角色管理</h3>
     <div class="ops">
       <el-input v-model="form.name" placeholder="角色名称" style="width: 220px" />
@@ -40,6 +40,7 @@ const create = async () => {
 }
 
 const remove = async (id: number) => {
+  if (!window.confirm(`确认删除角色 #${id} 吗？`)) return
   await deleteRole(id)
   await load()
 }

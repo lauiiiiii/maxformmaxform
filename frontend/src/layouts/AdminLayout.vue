@@ -10,29 +10,28 @@
     <div class="admin-body">
       <aside class="admin-aside">
         <el-menu :default-active="activePath" router class="admin-menu" unique-opened>
-          <el-menu-item index="/admin/overview">总览</el-menu-item>
-          <el-sub-menu index="form">
+          <el-menu-item v-if="showAdminMenu" index="/admin/overview">总览</el-menu-item>
+          <el-sub-menu v-if="showAdminMenu" index="form">
             <template #title>表单管理</template>
             <el-menu-item index="/admin/surveys">问卷管理</el-menu-item>
-            <el-menu-item index="/admin/repos">题库管理</el-menu-item>
             <el-menu-item index="/admin/flows">流程列表</el-menu-item>
           </el-sub-menu>
-          <el-sub-menu index="user">
+          <el-sub-menu v-if="showAdminMenu" index="user">
             <template #title>用户管理</template>
             <el-menu-item index="/admin/members">成员管理</el-menu-item>
             <el-menu-item index="/admin/roles">角色管理</el-menu-item>
             <el-menu-item index="/admin/depts">部门管理</el-menu-item>
             <el-menu-item index="/admin/positions">岗位管理</el-menu-item>
           </el-sub-menu>
-          <el-sub-menu index="system">
+          <el-sub-menu v-if="showAdminMenu || showManagementAiMenu" index="system">
             <template #title>系统管理</template>
-            <el-menu-item index="/admin/enterprise">企业信息</el-menu-item>
-            <el-menu-item index="/admin/config">系统配置</el-menu-item>
-            <el-menu-item index="/admin/statistics">数据统计</el-menu-item>
-            <el-menu-item index="/admin/approval">审批与日志</el-menu-item>
+            <el-menu-item v-if="showAdminMenu" index="/admin/enterprise">企业信息</el-menu-item>
+            <el-menu-item v-if="showManagementAiMenu" index="/admin/config">系统配置</el-menu-item>
+            <el-menu-item v-if="showAdminMenu" index="/admin/statistics">数据统计</el-menu-item>
+            <el-menu-item v-if="showAdminMenu" index="/admin/approval">审批与日志</el-menu-item>
           </el-sub-menu>
-          <el-menu-item index="/admin/messages">消息中心</el-menu-item>
-          <el-menu-item index="/admin/profile">个人中心</el-menu-item>
+          <el-menu-item v-if="showAdminMenu" index="/admin/messages">消息中心</el-menu-item>
+          <el-menu-item v-if="showAdminMenu" index="/admin/profile">个人中心</el-menu-item>
         </el-menu>
       </aside>
       <main class="admin-main">
@@ -46,7 +45,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+
 const route = useRoute()
+const authStore = useAuthStore()
+
+const showAdminMenu = computed(() => authStore.isAdmin)
+const showManagementAiMenu = computed(() => authStore.hasPermissionPrefix('management_ai.'))
+
 const activePath = computed(() => {
   // 高亮到二级路径，例如 /admin/members
   const p = route.path

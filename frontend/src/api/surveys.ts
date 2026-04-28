@@ -1,8 +1,47 @@
 import http from './http'
 import type { ApiResponse, PaginatedData } from '../types/api'
 import type { Survey, SurveyForm } from '../types/survey'
+import type {
+  SurveyListQueryDTO,
+  SurveyQuestionStatDTO,
+  SurveyResultFileStatDTO,
+  SurveyResultMatrixRowStatDTO,
+  SurveyResultOptionStatDTO,
+  SurveyResultRegionStatDTO,
+  SurveyResultTrendPointDTO,
+  SurveyDryRunPayloadDTO,
+  SurveyResultsDTO,
+  SurveyValidationResultDTO,
+  SurveyTrashListQueryDTO,
+  SurveyTrashPageDTO
+} from '../../../shared/survey.contract.js'
+import type { SurveySubmitResultDTO, UploadedSurveyFileDTO } from '../../../shared/surveyUpload.contract.js'
 
-export async function listSurveys(params?: { page?: number; pageSize?: number; status?: string; creator_id?: number | string; createdBy?: string; folder_id?: number | null }): Promise<PaginatedData<Survey>> {
+type TrashListResponse = ApiResponse<SurveyTrashPageDTO | Survey[]> & {
+  total?: number
+  page?: number
+  pageSize?: number
+}
+
+function normalizeTrashPage(payload: TrashListResponse): SurveyTrashPageDTO {
+  if (Array.isArray(payload.data)) {
+    return {
+      list: payload.data,
+      total: Number(payload.total || payload.data.length || 0),
+      page: Number(payload.page || 1),
+      pageSize: Number(payload.pageSize || payload.data.length || 100)
+    }
+  }
+
+  return payload.data || {
+    list: [],
+    total: 0,
+    page: 1,
+    pageSize: 100
+  }
+}
+
+export async function listSurveys(params?: SurveyListQueryDTO): Promise<PaginatedData<Survey>> {
   const { data } = await http.get<ApiResponse<PaginatedData<Survey>>>('/surveys', { params })
   return data.data!
 }
@@ -27,6 +66,112 @@ export async function updateSurvey(id: string | number, payload: Partial<SurveyF
   return data.data!
 }
 
+export async function validateSurvey(payload: Partial<SurveyForm>): Promise<SurveyValidationResultDTO> {
+  const { data } = await http.post<ApiResponse<SurveyValidationResultDTO>>('/surveys/validate', payload)
+  return data.data!
+}
+
+export async function dryRunSurveyJson(payload: SurveyDryRunPayloadDTO): Promise<SurveyValidationResultDTO> {
+  const { data } = await http.post<ApiResponse<SurveyValidationResultDTO>>('/surveys/dry-run', payload)
+  return data.data!
+}
+
+export interface SurveyAiGenerateContextQuestionDTO {
+  title: string
+  type?: string | number
+}
+
+export interface SurveyAiGenerateRequestDTO {
+  prompt: string
+  context?: {
+    title?: string
+    description?: string
+    questions?: SurveyAiGenerateContextQuestionDTO[]
+  }
+}
+
+export interface SurveyAiGeneratedQuestionDTO {
+  legacyType: number
+  title: string
+  required: boolean
+  options?: string[]
+  placeholder?: string
+  description?: string
+  validation?: Record<string, unknown>
+}
+
+export interface SurveyAiProtocolQuestionTypeDTO {
+  type: string
+  label: string
+  legacyType: number
+  requiresOptions: boolean
+  requiresValidation?: boolean
+}
+
+export interface SurveyAiProtocolExampleQuestionDTO {
+  qid: string
+  title: string
+  type: string
+  required: boolean
+  options?: string[]
+  placeholder?: string
+  description?: string
+  validation?: Record<string, unknown>
+}
+
+export interface SurveyAiProtocolDTO {
+  kind: string
+  version: string
+  promptTemplate: {
+    id: string
+    version: string
+    systemTemplate: string
+    userTemplate: string
+    variables: string[]
+  }
+  output: {
+    kind: string
+    version: string
+    format: string
+    requiredTopLevelFields: string[]
+    questionFields: string[]
+  }
+  supportedQuestionTypes: SurveyAiProtocolQuestionTypeDTO[]
+  notes: string[]
+  exampleResponse: {
+    kind: string
+    version: string
+    title: string
+    description: string
+    questions: SurveyAiProtocolExampleQuestionDTO[]
+  }
+}
+
+export interface SurveyAiGenerateResultDTO {
+  kind: string
+  protocolVersion: string
+  promptTemplateVersion: string
+  title: string
+  description: string
+  questions: SurveyAiGeneratedQuestionDTO[]
+  provider: {
+    providerId: string
+    providerLabel: string
+    model: string
+  }
+  aiMeta?: Record<string, unknown>
+}
+
+export async function getSurveyAiProtocol(): Promise<SurveyAiProtocolDTO> {
+  const { data } = await http.get<ApiResponse<SurveyAiProtocolDTO>>('/surveys/ai/protocol')
+  return data.data!
+}
+
+export async function generateSurveyByAi(payload: SurveyAiGenerateRequestDTO): Promise<SurveyAiGenerateResultDTO> {
+  const { data } = await http.post<ApiResponse<SurveyAiGenerateResultDTO>>('/surveys/ai/generate', payload)
+  return data.data!
+}
+
 export async function deleteSurvey(id: string | number): Promise<void> {
   await http.delete(`/surveys/${id}`)
 }
@@ -41,23 +186,19 @@ export async function closeSurvey(id: string | number): Promise<Survey> {
   return data.data!
 }
 
-export async function submitResponses(id: string | number, answers: unknown[], duration?: number | Record<string, unknown>) {
+export async function submitResponses(
+  id: string | number,
+  answers: unknown[],
+  duration?: number | Record<string, unknown>
+): Promise<ApiResponse<SurveySubmitResultDTO>> {
   const payload = typeof duration === 'number' || duration === undefined
     ? { answers, duration }
     : { answers, ...duration }
-  const { data } = await http.post<ApiResponse<{ id: number }>>(`/surveys/${id}/responses`, payload)
+  const { data } = await http.post<ApiResponse<SurveySubmitResultDTO>>(`/surveys/${id}/responses`, payload)
   return data
 }
 
-export interface UploadedSurveyFile {
-  id: number
-  name: string
-  url: string
-  size: number
-  type: string
-  surveyId: number
-  uploadToken: string
-}
+export type UploadedSurveyFile = UploadedSurveyFileDTO
 
 export async function uploadSurveyFile(
   id: string | number,
@@ -76,84 +217,16 @@ export async function uploadSurveyFile(
   return data.data!
 }
 
-export interface SurveyResultOptionStat {
-  label: string
-  value?: string
-  count: number
-  percentage: number
-  avgRank?: number | null
-  avgShare?: number | null
-  totalShare?: number | null
-}
-
-export interface SurveyResultFileStat {
-  id: number
-  name: string
-  url: string
-  type: string
-  size: number
-}
-
-export interface SurveyResultMatrixRowStat {
-  label: string
-  value: string
-  totalAnswers: number
-  options: SurveyResultOptionStat[]
-}
-
-export interface SurveyResultTrendPoint {
-  date: string
-  label: string
-  count: number
-}
-
-export interface SurveyResultRegionStat {
-  hasLocationData: boolean
-  scope?: string
-  missingCount: number
-  items: Array<{ label: string; value: string }>
-  emptyReason: string | null
-}
-
-export interface SurveyQuestionStat {
-  questionId: number
-  questionTitle: string
-  type: string
-  totalAnswers: number
-  options?: SurveyResultOptionStat[]
-  sampleAnswers?: string[]
-  avgValue?: number | null
-  minValue?: number | null
-  maxValue?: number | null
-  totalFiles?: number
-  sampleFiles?: SurveyResultFileStat[]
-  earliestDate?: string | null
-  latestDate?: string | null
-  avgScore?: number | null
-  distribution?: Record<string, number>
-  matrixMode?: string
-  rows?: SurveyResultMatrixRowStat[]
-}
-
-export interface SurveyResults {
-  totalSubmissions: number
-  lastSubmitAt: string | null
-  total: number
-  today: number
-  avgScore?: number
-  completed: number
-  incomplete: number
-  completionRate: number
-  avgDuration: string | null
-  avgTime: number | null
-  submissionTrend?: SurveyResultTrendPoint[]
-  regionStats?: SurveyResultRegionStat
-  systemStats?: Record<string, Array<{ label: string; value: string }>>
-  questionStats: SurveyQuestionStat[]
-}
+export type SurveyResultOptionStat = SurveyResultOptionStatDTO
+export type SurveyResultFileStat = SurveyResultFileStatDTO
+export type SurveyResultMatrixRowStat = SurveyResultMatrixRowStatDTO
+export type SurveyResultTrendPoint = SurveyResultTrendPointDTO
+export type SurveyResultRegionStat = SurveyResultRegionStatDTO
+export type SurveyQuestionStat = SurveyQuestionStatDTO
+export type SurveyResults = SurveyResultsDTO
 
 export async function getResults(id: string | number): Promise<SurveyResults> {
-  const { data } = await http.get<ApiResponse<SurveyResults>>(`/surveys/${id}/results`)
+  const { data } = await http.get<ApiResponse<SurveyResultsDTO>>(`/surveys/${id}/results`)
   return data.data!
 }
 
@@ -161,9 +234,14 @@ export async function moveSurvey(_id: string | number, _folderId: number | null)
   await http.put(`/surveys/${_id}/folder`, { folder_id: _folderId })
 }
 
-export async function listTrash(): Promise<Survey[]> {
-  const { data } = await http.get<ApiResponse<Survey[]>>('/surveys/trash')
-  return data.data || []
+export async function listSurveyTrashPage(params?: SurveyTrashListQueryDTO): Promise<SurveyTrashPageDTO> {
+  const response = await http.get<TrashListResponse>('/surveys/trash', { params })
+  return normalizeTrashPage(response.data)
+}
+
+export async function listTrash(params?: SurveyTrashListQueryDTO): Promise<Survey[]> {
+  const page = await listSurveyTrashPage(params)
+  return page.list
 }
 
 export async function restoreSurvey(_id: string | number): Promise<Survey | null> {

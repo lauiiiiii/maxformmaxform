@@ -1,0 +1,13 @@
+{
+  "name": "maxformmaxform",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node scripts/test-suite.mjs quick",
+    "test:backend": "npm --prefix backend test",
+    "test:frontend": "npm --prefix frontend run build",
+    "test:smoke": "node scripts/test-suite.mjs smoke",
+    "test:e2e": "npm --prefix frontend run test:e2e",
+    "test:all": "node scripts/test-suite.mjs full"
+  }
+}
