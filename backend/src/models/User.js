@@ -1,11 +1,7 @@
-import knex from '../db/knex.js'
+import getDb from '../db/getDb.js'
 import bcrypt from 'bcryptjs'
 
 const TABLE = 'users'
-
-function getDb(options = {}) {
-  return options.db || knex
-}
 
 const User = {
   async findById(id, options = {}) {
@@ -61,11 +57,16 @@ const User = {
 
   async list({ page = 1, pageSize = 20, dept_id, is_active } = {}, options = {}) {
     const db = getDb(options)
-    let q = db(TABLE).select('id', 'username', 'email', 'role_id', 'dept_id', 'position_id', 'avatar', 'is_active', 'last_login_at', 'created_at')
-    if (dept_id !== undefined) q = q.where('dept_id', dept_id)
-    if (is_active !== undefined) q = q.where('is_active', is_active)
-    const total = await q.clone().count('* as cnt').first().then(r => r.cnt)
-    const list = await q.orderBy('created_at', 'desc').limit(pageSize).offset((page - 1) * pageSize)
+    let filters = db(TABLE)
+    if (dept_id !== undefined) filters = filters.where('dept_id', dept_id)
+    if (is_active !== undefined) filters = filters.where('is_active', is_active)
+
+    const total = await filters.clone().count('* as cnt').first().then(r => Number(r?.cnt || 0))
+    const list = await filters.clone()
+      .select('id', 'username', 'email', 'role_id', 'dept_id', 'position_id', 'avatar', 'is_active', 'last_login_at', 'created_at')
+      .orderBy('created_at', 'desc')
+      .limit(pageSize)
+      .offset((page - 1) * pageSize)
     return { total, list }
   },
 

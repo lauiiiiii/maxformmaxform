@@ -489,6 +489,7 @@ test('PUT /api/surveys/:id keeps writable QuestionDTO fields while dropping extr
     body: {
       questions: [{
         type: 'matrix',
+        uiType: 22,
         title: 'Matrix Question',
         options: [
           { label: 'Column 1', value: '1' },
@@ -496,6 +497,13 @@ test('PUT /api/surveys/:id keeps writable QuestionDTO fields while dropping extr
         ],
         matrix: {
           selectionType: 'single',
+          rowTitleWidth: '30%',
+          rightRowTitle: true,
+          rowTitleRandom: true,
+          verticalSelect: true,
+          singleQuestionAnswer: true,
+          mobileLayout: 'stacked',
+          optionLimit: { enabled: false, min: 0, max: 0 },
           rows: [{
             label: 'Row 1',
             value: 'r1',
@@ -519,6 +527,14 @@ test('PUT /api/surveys/:id keeps writable QuestionDTO fields while dropping extr
   assert.equal(response.status, 200)
   assert.equal(json.success, true)
   assert.ok(updatedPayload)
+  assert.equal(updatedPayload.questions[0].uiType, 22)
+  assert.equal(updatedPayload.questions[0].matrix.rowTitleWidth, '30%')
+  assert.equal(updatedPayload.questions[0].matrix.rightRowTitle, true)
+  assert.equal(updatedPayload.questions[0].matrix.rowTitleRandom, true)
+  assert.equal(updatedPayload.questions[0].matrix.verticalSelect, true)
+  assert.equal(updatedPayload.questions[0].matrix.singleQuestionAnswer, true)
+  assert.equal(updatedPayload.questions[0].matrix.mobileLayout, 'stacked')
+  assert.deepEqual(updatedPayload.questions[0].matrix.optionLimit, { enabled: false, min: 0, max: 0 })
   assert.equal(updatedPayload.questions[0].matrix.rows[0].helper, undefined)
   assert.equal(updatedPayload.questions[0].validation.unknownFlag, undefined)
   assert.equal(updatedPayload.questions[0].examConfig.secret, undefined)

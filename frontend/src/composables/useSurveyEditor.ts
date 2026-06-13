@@ -1,6 +1,6 @@
 import { nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import { createSurvey, publishSurvey, updateSurvey } from '@/api/surveys'
+import { createSurvey, publishSurvey, updateSurvey, validateSurvey } from '@/api/surveys'
 import { useEditorBatch } from '@/composables/editor/editor-batch'
 import { useEditorCore } from '@/composables/editor/editor-core'
 import type { QuestionBankExportMetadata } from '@/composables/editor/editor-core'
@@ -18,8 +18,48 @@ type EditorRichtextState = ReturnType<typeof useEditorRichtext>
 type EditorLogicState = ReturnType<typeof useEditorLogic>
 type EditorBatchState = ReturnType<typeof useEditorBatch>
 type EditorQuotaState = ReturnType<typeof useEditorQuota>
+type SurveyValidationPayload = Parameters<typeof validateSurvey>[0]
 
 export type SurveyEditorQuickActionKey = 'toggleNumbers' | 'batchAdd'
+
+function formatSurveyValidationMessage(message?: string | null): string {
+  const text = String(message || '').trim()
+  if (!text) return '问卷内容校验未通过，请检查题目设置'
+
+  const questionTitleMatch = text.match(/^Question (\d+) title is required$/i)
+  if (questionTitleMatch) return `第 ${questionTitleMatch[1]} 题请输入题目标题`
+
+  const optionCountMatch = text.match(/^Question (\d+) needs at least 2 options$/i)
+  if (optionCountMatch) return `第 ${optionCountMatch[1]} 题请至少保留 2 个选项`
+
+  const matrixColumnMatch = text.match(/^Question (\d+) needs at least 2 columns$/i)
+  if (matrixColumnMatch) return `第 ${matrixColumnMatch[1]} 题请至少保留 2 个矩阵列`
+
+  const matrixRowMatch = text.match(/^Question (\d+) needs at least 1 row$/i)
+  if (matrixRowMatch) return `第 ${matrixRowMatch[1]} 题请至少保留 1 个矩阵行`
+
+  const multiFillItemMatch = text.match(/^Question (\d+) needs at least 1 fill item$/i)
+  if (multiFillItemMatch) return `第 ${multiFillItemMatch[1]} 题请至少保留 1 个填空项`
+
+  if (/^Title is required$/i.test(text)) return '请输入问卷标题'
+  if (/^At least one question is required$/i.test(text)) return '请至少添加一道题目'
+  if (/^End time is invalid$/i.test(text)) return '截止时间格式无效'
+  if (/^End time must be later than now$/i.test(text)) return '截止时间必须晚于当前时间'
+
+  return text
+}
+
+async function getSurveyPayloadValidationError(payload: SurveyValidationPayload): Promise<string> {
+  const result = await validateSurvey(payload)
+  return result?.valid ? '' : formatSurveyValidationMessage(result?.error)
+}
+
+function getRequestErrorMessage(error: any, fallback: string): string {
+  return error?.response?.data?.error?.message
+    || error?.response?.data?.message
+    || error?.message
+    || fallback
+}
 
 interface SurveyEditorContextBoundary {
   surveyForm: EditorCoreState['surveyForm']
@@ -31,6 +71,7 @@ interface SurveyEditorContextBoundary {
   validateForm: EditorCoreState['validateForm']
   errors: EditorCoreState['errors']
   closeQuestionEdit: EditorCoreState['closeQuestionEdit']
+  openQuestionEdit: EditorCoreState['openQuestionEdit']
   showAIHelper: EditorCoreState['showAIHelper']
   editingIndex: EditorCoreState['editingIndex']
   getQuestionTypeLabel: EditorCoreState['getQuestionTypeLabel']
@@ -49,6 +90,7 @@ interface SurveyEditorContextBoundary {
   hasOptions: EditorCoreState['hasOptions']
   addOption: EditorCoreState['addOption']
   openBatchEdit: EditorBatchState['openBatchEdit']
+  openMatrixRowsBatchEdit: EditorBatchState['openMatrixRowsBatchEdit']
   isGroupConfigured: EditorCoreState['isGroupConfigured']
   isScoreConfigured: EditorCoreState['isScoreConfigured']
   isQuotaConfigured: EditorQuotaState['isQuotaConfigured']
@@ -59,17 +101,33 @@ interface SurveyEditorContextBoundary {
   optionSummary: EditorLogicState['optionSummary']
   jumpSummary: EditorLogicState['jumpSummary']
   ensureOptionExtras: EditorCoreState['ensureOptionExtras']
+  getOptionExtra: EditorCoreState['getOptionExtra']
   openOptionRichEditor: EditorRichtextState['openOptionRichEditor']
   addOptionAt: EditorCoreState['addOptionAt']
   removeOption: EditorCoreState['removeOption']
   toggleDesc: EditorCoreState['toggleDesc']
   toggleHidden: EditorCoreState['toggleHidden']
   isMatrixLegacyQuestion: EditorCoreState['isMatrixLegacyQuestion']
+  isMultiFillLegacyQuestion: EditorCoreState['isMultiFillLegacyQuestion']
   isMatrixDropdownLegacyQuestion: EditorCoreState['isMatrixDropdownLegacyQuestion']
   isMatrixMultipleLegacyQuestion: EditorCoreState['isMatrixMultipleLegacyQuestion']
   addMatrixRow: EditorCoreState['addMatrixRow']
+  insertMatrixRow: EditorCoreState['insertMatrixRow']
   ensureMatrixConfig: EditorCoreState['ensureMatrixConfig']
+  getMatrixConfig: EditorCoreState['getMatrixConfig']
+  normalizeMatrixOptionLimit: EditorCoreState['normalizeMatrixOptionLimit']
   removeMatrixRow: EditorCoreState['removeMatrixRow']
+  addMatrixColumn: EditorCoreState['addMatrixColumn']
+  insertMatrixColumn: EditorCoreState['insertMatrixColumn']
+  removeMatrixColumn: EditorCoreState['removeMatrixColumn']
+  swapMatrixRowsAndOptions: EditorCoreState['swapMatrixRowsAndOptions']
+  matrixRowTitleWidthOptions: EditorCoreState['matrixRowTitleWidthOptions']
+  matrixMobileLayoutOptions: EditorCoreState['matrixMobileLayoutOptions']
+  ensureMultiFillConfig: EditorCoreState['ensureMultiFillConfig']
+  getMultiFillConfig: EditorCoreState['getMultiFillConfig']
+  addMultiFillItem: EditorCoreState['addMultiFillItem']
+  addMultiFillItemAt: EditorCoreState['addMultiFillItemAt']
+  removeMultiFillItem: EditorCoreState['removeMultiFillItem']
   selectablePrevQs: EditorLogicState['selectablePrevQs']
   questionLogicSummary: EditorLogicState['questionLogicSummary']
   openLogicDialog: EditorLogicState['openLogicDialog']
@@ -77,17 +135,23 @@ interface SurveyEditorContextBoundary {
   openOptionLogicDialog: EditorLogicState['openOptionLogicDialog']
   isStandaloneConfigType: EditorCoreState['isStandaloneConfigType']
   ensureSliderValidation: EditorCoreState['ensureSliderValidation']
+  getSliderValidation: EditorCoreState['getSliderValidation']
   normalizeSliderValidation: EditorCoreState['normalizeSliderValidation']
   isSliderLegacyQuestion: EditorCoreState['isSliderLegacyQuestion']
   isUploadLegacyQuestion: EditorCoreState['isUploadLegacyQuestion']
   ensureUploadConfig: EditorCoreState['ensureUploadConfig']
+  getUploadConfig: EditorCoreState['getUploadConfig']
   normalizeUploadConfig: EditorCoreState['normalizeUploadConfig']
   uploadConfigSummary: EditorCoreState['uploadConfigSummary']
+  getUploadRestrictionMode: EditorCoreState['getUploadRestrictionMode']
+  setUploadRestrictionMode: EditorCoreState['setUploadRestrictionMode']
   isRatingLegacyQuestion: EditorCoreState['isRatingLegacyQuestion']
   ensureRatingValidation: EditorCoreState['ensureRatingValidation']
+  getRatingValidation: EditorCoreState['getRatingValidation']
   normalizeRatingValidation: EditorCoreState['normalizeRatingValidation']
   isScaleLegacyQuestion: EditorCoreState['isScaleLegacyQuestion']
   ensureScaleValidation: EditorCoreState['ensureScaleValidation']
+  getScaleValidation: EditorCoreState['getScaleValidation']
   normalizeScaleValidation: EditorCoreState['normalizeScaleValidation']
   getScalePreviewValues: EditorCoreState['getScalePreviewValues']
   finishEdit: EditorCoreState['finishEdit']
@@ -165,8 +229,11 @@ interface SurveyEditorContextBoundary {
   saveBatchAddQuestions: EditorBatchState['saveBatchAddQuestions']
   showBatchDialog: EditorBatchState['showBatchDialog']
   closeBatchDialog: EditorBatchState['closeBatchDialog']
+  batchDialogTitle: EditorBatchState['batchDialogTitle']
+  batchDialogPlaceholder: EditorBatchState['batchDialogPlaceholder']
   batchText: EditorBatchState['batchText']
   batchLineCount: EditorBatchState['batchLineCount']
+  showBatchPresets: EditorBatchState['showBatchPresets']
   presetNames: EditorBatchState['presetNames']
   usePreset: EditorBatchState['usePreset']
   saveBatchEdit: EditorBatchState['saveBatchEdit']
@@ -249,6 +316,7 @@ const questionConfigPanelKeys = [
   'onOutlineDrop',
   'onOutlineDragEnd',
   'editingIndex',
+  'openQuestionEdit',
   'currentTab',
   'startRename',
   'renamingIndex',
@@ -264,6 +332,7 @@ const questionListPanelKeys = [
   'validateForm',
   'errors',
   'closeQuestionEdit',
+  'openQuestionEdit',
   'showAIHelper',
   'editingIndex',
   'getQuestionTypeLabel',
@@ -282,6 +351,7 @@ const questionListPanelKeys = [
   'hasOptions',
   'addOption',
   'openBatchEdit',
+  'openMatrixRowsBatchEdit',
   'isGroupConfigured',
   'isScoreConfigured',
   'isQuotaConfigured',
@@ -292,17 +362,33 @@ const questionListPanelKeys = [
   'optionSummary',
   'jumpSummary',
   'ensureOptionExtras',
+  'getOptionExtra',
   'openOptionRichEditor',
   'addOptionAt',
   'removeOption',
   'toggleDesc',
   'toggleHidden',
   'isMatrixLegacyQuestion',
+  'isMultiFillLegacyQuestion',
   'isMatrixDropdownLegacyQuestion',
   'isMatrixMultipleLegacyQuestion',
   'addMatrixRow',
+  'insertMatrixRow',
   'ensureMatrixConfig',
+  'getMatrixConfig',
+  'normalizeMatrixOptionLimit',
   'removeMatrixRow',
+  'addMatrixColumn',
+  'insertMatrixColumn',
+  'removeMatrixColumn',
+  'swapMatrixRowsAndOptions',
+  'matrixRowTitleWidthOptions',
+  'matrixMobileLayoutOptions',
+  'ensureMultiFillConfig',
+  'getMultiFillConfig',
+  'addMultiFillItem',
+  'addMultiFillItemAt',
+  'removeMultiFillItem',
   'selectablePrevQs',
   'questionLogicSummary',
   'openLogicDialog',
@@ -310,17 +396,23 @@ const questionListPanelKeys = [
   'openOptionLogicDialog',
   'isStandaloneConfigType',
   'ensureSliderValidation',
+  'getSliderValidation',
   'normalizeSliderValidation',
   'isSliderLegacyQuestion',
   'isUploadLegacyQuestion',
   'ensureUploadConfig',
+  'getUploadConfig',
   'normalizeUploadConfig',
   'uploadConfigSummary',
+  'getUploadRestrictionMode',
+  'setUploadRestrictionMode',
   'isRatingLegacyQuestion',
   'ensureRatingValidation',
+  'getRatingValidation',
   'normalizeRatingValidation',
   'isScaleLegacyQuestion',
   'ensureScaleValidation',
+  'getScaleValidation',
   'normalizeScaleValidation',
   'getScalePreviewValues',
   'finishEdit',
@@ -387,8 +479,11 @@ const logicSettingsKeys = [
   'saveBatchAddQuestions',
   'showBatchDialog',
   'closeBatchDialog',
+  'batchDialogTitle',
+  'batchDialogPlaceholder',
   'batchText',
   'batchLineCount',
+  'showBatchPresets',
   'presetNames',
   'usePreset',
   'saveBatchEdit',
@@ -530,6 +625,7 @@ function createSurveyEditorContracts({
       onOutlineDrop: core.onOutlineDrop,
       onOutlineDragEnd: core.onOutlineDragEnd,
       editingIndex: core.editingIndex,
+      openQuestionEdit: core.openQuestionEdit,
       currentTab: core.currentTab,
       startRename: core.startRename,
       renamingIndex: core.renamingIndex,
@@ -544,6 +640,7 @@ function createSurveyEditorContracts({
       validateForm: core.validateForm,
       errors: core.errors,
       closeQuestionEdit: core.closeQuestionEdit,
+      openQuestionEdit: core.openQuestionEdit,
       showAIHelper: core.showAIHelper,
       editingIndex: core.editingIndex,
       getQuestionTypeLabel: core.getQuestionTypeLabel,
@@ -562,6 +659,7 @@ function createSurveyEditorContracts({
       hasOptions: core.hasOptions,
       addOption: core.addOption,
       openBatchEdit: batch.openBatchEdit,
+      openMatrixRowsBatchEdit: batch.openMatrixRowsBatchEdit,
       isGroupConfigured: core.isGroupConfigured,
       isScoreConfigured: core.isScoreConfigured,
       isQuotaConfigured: quota.isQuotaConfigured,
@@ -572,17 +670,33 @@ function createSurveyEditorContracts({
       optionSummary: logic.optionSummary,
       jumpSummary: logic.jumpSummary,
       ensureOptionExtras: core.ensureOptionExtras,
+      getOptionExtra: core.getOptionExtra,
       openOptionRichEditor: richtext.openOptionRichEditor,
       addOptionAt: core.addOptionAt,
       removeOption: core.removeOption,
       toggleDesc: core.toggleDesc,
       toggleHidden: core.toggleHidden,
       isMatrixLegacyQuestion: core.isMatrixLegacyQuestion,
+      isMultiFillLegacyQuestion: core.isMultiFillLegacyQuestion,
       isMatrixDropdownLegacyQuestion: core.isMatrixDropdownLegacyQuestion,
       isMatrixMultipleLegacyQuestion: core.isMatrixMultipleLegacyQuestion,
       addMatrixRow: core.addMatrixRow,
+      insertMatrixRow: core.insertMatrixRow,
       ensureMatrixConfig: core.ensureMatrixConfig,
+      getMatrixConfig: core.getMatrixConfig,
+      normalizeMatrixOptionLimit: core.normalizeMatrixOptionLimit,
       removeMatrixRow: core.removeMatrixRow,
+      addMatrixColumn: core.addMatrixColumn,
+      insertMatrixColumn: core.insertMatrixColumn,
+      removeMatrixColumn: core.removeMatrixColumn,
+      swapMatrixRowsAndOptions: core.swapMatrixRowsAndOptions,
+      matrixRowTitleWidthOptions: core.matrixRowTitleWidthOptions,
+      matrixMobileLayoutOptions: core.matrixMobileLayoutOptions,
+      ensureMultiFillConfig: core.ensureMultiFillConfig,
+      getMultiFillConfig: core.getMultiFillConfig,
+      addMultiFillItem: core.addMultiFillItem,
+      addMultiFillItemAt: core.addMultiFillItemAt,
+      removeMultiFillItem: core.removeMultiFillItem,
       selectablePrevQs: logic.selectablePrevQs,
       questionLogicSummary: logic.questionLogicSummary,
       openLogicDialog: logic.openLogicDialog,
@@ -590,17 +704,23 @@ function createSurveyEditorContracts({
       openOptionLogicDialog: logic.openOptionLogicDialog,
       isStandaloneConfigType: core.isStandaloneConfigType,
       ensureSliderValidation: core.ensureSliderValidation,
+      getSliderValidation: core.getSliderValidation,
       normalizeSliderValidation: core.normalizeSliderValidation,
       isSliderLegacyQuestion: core.isSliderLegacyQuestion,
       isUploadLegacyQuestion: core.isUploadLegacyQuestion,
       ensureUploadConfig: core.ensureUploadConfig,
+      getUploadConfig: core.getUploadConfig,
       normalizeUploadConfig: core.normalizeUploadConfig,
       uploadConfigSummary: core.uploadConfigSummary,
+      getUploadRestrictionMode: core.getUploadRestrictionMode,
+      setUploadRestrictionMode: core.setUploadRestrictionMode,
       isRatingLegacyQuestion: core.isRatingLegacyQuestion,
       ensureRatingValidation: core.ensureRatingValidation,
+      getRatingValidation: core.getRatingValidation,
       normalizeRatingValidation: core.normalizeRatingValidation,
       isScaleLegacyQuestion: core.isScaleLegacyQuestion,
       ensureScaleValidation: core.ensureScaleValidation,
+      getScaleValidation: core.getScaleValidation,
       normalizeScaleValidation: core.normalizeScaleValidation,
       getScalePreviewValues: core.getScalePreviewValues,
       finishEdit: core.finishEdit,
@@ -665,8 +785,11 @@ function createSurveyEditorContracts({
       saveBatchAddQuestions: batch.saveBatchAddQuestions,
       showBatchDialog: batch.showBatchDialog,
       closeBatchDialog: batch.closeBatchDialog,
+      batchDialogTitle: batch.batchDialogTitle,
+      batchDialogPlaceholder: batch.batchDialogPlaceholder,
       batchText: batch.batchText,
       batchLineCount: batch.batchLineCount,
+      showBatchPresets: batch.showBatchPresets,
       presetNames: batch.presetNames,
       usePreset: batch.usePreset,
       saveBatchEdit: batch.saveBatchEdit,
@@ -721,7 +844,8 @@ export function useSurveyEditor(): SurveyEditorContracts {
   const batch = useEditorBatch({
     surveyForm: core.surveyForm,
     createDefaultQuestion: core.createDefaultQuestion,
-    ensureOptionExtras: core.ensureOptionExtras
+    ensureOptionExtras: core.ensureOptionExtras,
+    ensureMatrixConfig: core.ensureMatrixConfig
   })
 
   const quota = useEditorQuota({
@@ -734,6 +858,11 @@ export function useSurveyEditor(): SurveyEditorContracts {
     core.saving.value = true
     try {
       const payload = core.toServerPayload()
+      const validationError = await getSurveyPayloadValidationError(payload)
+      if (validationError) {
+        alert(validationError)
+        return
+      }
       const editingId = core.route.params?.id as string | undefined
       const created = editingId ? await updateSurvey(String(editingId), payload) : await createSurvey(payload)
       alert('草稿保存成功')
@@ -741,8 +870,9 @@ export function useSurveyEditor(): SurveyEditorContracts {
         core.router.push({ name: 'EditSurvey', params: { id: created.id } })
       }
     } catch (error: any) {
-      console.error('保存草稿失败:', error)
-      alert(error?.message || '保存失败，请稍后重试')
+      const message = getRequestErrorMessage(error, '保存失败，请稍后重试')
+      console.error('保存草稿失败:', message, error)
+      alert(message)
     } finally {
       core.saving.value = false
     }
@@ -751,23 +881,31 @@ export function useSurveyEditor(): SurveyEditorContracts {
   const publishSurveyAction = async () => {
     core.validateForm()
     if (!core.canPublish.value) return
-    if (!confirm('确定要发布这份问卷吗？发布后将无法修改基础结构。')) return
 
     try {
+      const payload = core.toServerPayload()
+      const validationError = await getSurveyPayloadValidationError(payload)
+      if (validationError) {
+        alert(validationError)
+        return
+      }
+      if (!confirm('确定要发布这份问卷吗？发布后将无法修改基础结构。')) return
+
       const editingId = core.route.params?.id as string | undefined
       if (editingId) {
-        await updateSurvey(String(editingId), core.toServerPayload())
+        await updateSurvey(String(editingId), payload)
         await publishSurvey(String(editingId))
       } else {
-        const created = await createSurvey(core.toServerPayload())
+        const created = await createSurvey(payload)
         if (!created?.id) throw new Error('发布失败：未获取到问卷 ID')
         await publishSurvey(created.id)
       }
       alert('问卷发布成功')
       core.router.push({ name: 'SurveyList' })
     } catch (error: any) {
-      console.error('发布失败:', error)
-      alert(error?.message || '发布失败，请稍后重试')
+      const message = getRequestErrorMessage(error, '发布失败，请稍后重试')
+      console.error('发布失败:', message, error)
+      alert(message)
     }
   }
 

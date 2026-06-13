@@ -58,6 +58,8 @@ async function publishSurvey(request: import('playwright/test').APIRequestContex
     }
   })
   expect(response.ok()).toBeTruthy()
+  const body = await response.json()
+  return body.data
 }
 
 test.describe('Admin And Upload Browser E2E', () => {
@@ -118,8 +120,17 @@ test.describe('Admin And Upload Browser E2E', () => {
 
     await page.waitForURL('**/user-dashboard')
     expect(dialogs.length).toBeGreaterThanOrEqual(2)
+    const surveyResponse = await request.get(`${backendBaseUrl}/api/surveys/${surveyId}`, {
+      headers: {
+        Authorization: `Bearer ${user.token}`
+      }
+    })
+    expect(surveyResponse.ok()).toBeTruthy()
+    const surveyBody = await surveyResponse.json()
+    const shareCode = surveyBody.data.share_code || surveyBody.data.shareId
+    expect(shareCode).toBeTruthy()
 
-    await page.goto(`/s/${surveyId}?force=desktop`)
+    await page.goto(`/s/${shareCode}?force=desktop`)
     await expect(page.getByTestId('fill-survey-page')).toBeVisible()
 
     await page.getByTestId('fill-upload-input-0').setInputFiles({
@@ -130,7 +141,7 @@ test.describe('Admin And Upload Browser E2E', () => {
 
     await expect(page.getByTestId('fill-upload-list-0')).toContainText('proof.pdf')
     await page.locator('.submit-btn').click()
-    await page.waitForURL(new RegExp(`/s/${surveyId}/success`))
+    await page.waitForURL(`**/s/${shareCode}/success`)
 
     await page.goto(`/surveys/${surveyId}/results`)
     await expect(page.getByTestId('results-total-submissions')).toHaveText('1')
@@ -157,8 +168,10 @@ test.describe('Admin And Upload Browser E2E', () => {
       }
     })
     await publishSurvey(request, user.token, survey.id)
+    const shareCode = survey.share_code || survey.shareId
+    expect(shareCode).toBeTruthy()
 
-    await page.goto(`/s/${survey.id}?force=desktop`)
+    await page.goto(`/s/${shareCode}?force=desktop`)
     await expect(page.getByTestId('fill-survey-page')).toBeVisible()
 
     await page.getByTestId('fill-upload-input-0').setInputFiles({

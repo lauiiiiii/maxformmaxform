@@ -381,8 +381,10 @@ test.describe('Survey Browser E2E', () => {
       }
     })
     await publishSurvey(request, user.token, survey.id)
+    const shareCode = survey.share_code || survey.shareId
+    expect(shareCode).toBeTruthy()
 
-    await page.goto(`/s/${survey.id}?force=desktop`)
+    await page.goto(`/s/${shareCode}?force=desktop`)
     await expect(page.getByTestId('fill-survey-page')).toBeVisible()
     await expect(page.getByText('Public Fill E2E Survey')).toBeVisible()
 
@@ -390,7 +392,7 @@ test.describe('Survey Browser E2E', () => {
     await page.locator('[data-testid="fill-question-1"]').locator('input').fill('Public fill submitted from browser E2E')
     await page.locator('.submit-btn').click()
 
-    await page.waitForURL(new RegExp(`/s/${survey.id}/success`))
+    await page.waitForURL(`**/s/${shareCode}/success`)
   })
 
   test('results page shows collected summary and analysis data', async ({ page, request }) => {

@@ -7,10 +7,13 @@ interface EditorBatchOptions {
   surveyForm: SurveyEditorForm
   createDefaultQuestion: (type: number) => SurveyEditorQuestion
   ensureOptionExtras: (question: SurveyEditorQuestion, optionIndex: number) => any
+  ensureMatrixConfig: (question: SurveyEditorQuestion) => { rows: string[] }
 }
 
+type BatchEditMode = 'options' | 'matrixRows'
+
 export function useEditorBatch(options: EditorBatchOptions) {
-  const { surveyForm, createDefaultQuestion, ensureOptionExtras } = options
+  const { surveyForm, createDefaultQuestion, ensureOptionExtras, ensureMatrixConfig } = options
 
   const showBatchAddDialog = ref(false)
   const batchAddText = ref('')
@@ -94,10 +97,21 @@ export function useEditorBatch(options: EditorBatchOptions) {
 
   const showBatchDialog = ref(false)
   const batchTargetIndex = ref<number | null>(null)
+  const batchEditMode = ref<BatchEditMode>('options')
   const batchText = ref('')
   const batchLineCount = computed(() => batchText.value.split(/\r?\n/).filter(line => line.trim() !== '').length)
+  const batchDialogTitle = computed(() => batchEditMode.value === 'matrixRows' ? '行标题' : '编辑选项')
+  const batchDialogPlaceholder = computed(() => batchEditMode.value === 'matrixRows'
+    ? '每行一个行标题；空行自动忽略；可直接粘贴Excel的一列'
+    : '每行一个选项；空行自动忽略；可直接粘贴Excel的一列')
+  const showBatchPresets = computed(() => batchEditMode.value === 'options')
 
   const presetDefs: Record<string, string[]> = {
+    满意度: ['很不满意', '不满意', '一般', '满意', '很满意'],
+    认同度: ['很不同意', '不同意', '一般', '同意', '很同意'],
+    重要度: ['很不重要', '不重要', '一般', '重要', '很重要'],
+    符合度: ['很不符合', '不符合', '一般', '符合', '很符合'],
+    可能性: ['很不可能', '不可能', '一般', '可能', '很可能'],
     性别: ['男', '女', '其他', '保密'],
     是否: ['是', '否'],
     '是/否/不确定': ['是', '否', '不确定'],
@@ -116,9 +130,15 @@ export function useEditorBatch(options: EditorBatchOptions) {
     return stripHtmlSimpleUtil(html)
   }
 
-  function openBatchEdit(index: number) {
+  function openBatchEdit(index: number, mode: BatchEditMode = 'options') {
     batchTargetIndex.value = index
+    batchEditMode.value = mode
     const question = surveyForm.questions[index]
+    if (mode === 'matrixRows') {
+      batchText.value = ensureMatrixConfig(question).rows.join('\n')
+      showBatchDialog.value = true
+      return
+    }
     const lines = (Array.isArray(question.options) ? question.options : []).map((option, optionIndex) => {
       const extra = ensureOptionExtras(question, optionIndex)
       if (extra?.rich) return stripHtmlSimple(String(option || ''))
@@ -126,6 +146,10 @@ export function useEditorBatch(options: EditorBatchOptions) {
     })
     batchText.value = lines.join('\n')
     showBatchDialog.value = true
+  }
+
+  function openMatrixRowsBatchEdit(index: number) {
+    openBatchEdit(index, 'matrixRows')
   }
 
   function closeBatchDialog() {
@@ -148,8 +172,20 @@ export function useEditorBatch(options: EditorBatchOptions) {
       .map(line => cleanLine(line))
       .filter(Boolean)
 
-    if (nextOptions.length === 0) {
-      await ElMessageBox.alert('请至少填写一行选项', '无法保存', { type: 'warning' })
+    if (batchEditMode.value === 'matrixRows') {
+      if (nextOptions.length === 0) {
+        await ElMessageBox.alert('请至少填写一行标题', '无法保存', { type: 'warning' })
+        return
+      }
+      ensureMatrixConfig(question).rows = [...nextOptions]
+      showBatchDialog.value = false
+      ElMessage.success('已批量更新行标题')
+      return
+    }
+
+    const isMatrixQuestion = [20, 21, 22, 24].includes(Number(question?.type))
+    if (nextOptions.length < (isMatrixQuestion ? 2 : 1)) {
+      await ElMessageBox.alert(isMatrixQuestion ? '矩阵题请至少填写两列选项' : '请至少填写一行选项', '无法保存', { type: 'warning' })
       return
     }
 
@@ -312,9 +348,14 @@ export function useEditorBatch(options: EditorBatchOptions) {
     saveBatchAddQuestions,
     showBatchDialog,
     openBatchEdit,
+    openMatrixRowsBatchEdit,
     closeBatchDialog,
+    batchEditMode,
+    batchDialogTitle,
+    batchDialogPlaceholder,
     batchText,
     batchLineCount,
+    showBatchPresets,
     presetNames,
     usePreset,
     saveBatchEdit,

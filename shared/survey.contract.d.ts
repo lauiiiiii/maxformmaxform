@@ -123,11 +123,40 @@ export interface UploadQuestionConfigDTO {
   maxFiles?: number
   maxSizeMb?: number
   accept?: string
+  compressSize?: boolean
+  compressDimensions?: boolean
+  maxWidth?: number
+  maxHeight?: number
+  watermark?: string
 }
 
 export interface MatrixQuestionConfigDTO {
   rows?: QuestionOptionDTO[] | string[]
   selectionType?: 'single' | 'multiple'
+  rowTitleWidth?: string
+  rightRowTitle?: boolean
+  rowTitleRandom?: boolean
+  verticalSelect?: boolean
+  singleQuestionAnswer?: boolean
+  mobileLayout?: 'auto' | 'inline' | 'stacked' | string
+  optionLimit?: {
+    enabled?: boolean
+    min?: number
+    max?: number
+  }
+}
+
+export interface MultiFillQuestionItemDTO {
+  label?: string
+  value?: string
+  order?: number
+  text?: string
+  placeholder?: string
+  required?: boolean
+}
+
+export interface MultiFillQuestionConfigDTO {
+  items?: MultiFillQuestionItemDTO[] | string[]
 }
 
 export interface QuestionDTO extends QuestionQuotaSettingsDTO {
@@ -143,6 +172,7 @@ export interface QuestionDTO extends QuestionQuotaSettingsDTO {
   validation?: QuestionValidationDTO
   upload?: UploadQuestionConfigDTO
   matrix?: MatrixQuestionConfigDTO
+  multiFill?: MultiFillQuestionConfigDTO
   logic?: QuestionLogicDTO
   examConfig?: QuestionExamConfigDTO
   jumpLogic?: QuestionJumpLogicDTO

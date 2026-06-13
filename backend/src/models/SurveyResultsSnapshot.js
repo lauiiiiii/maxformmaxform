@@ -1,27 +1,12 @@
-import knex from '../db/knex.js'
+import { parseJsonField } from '../utils/jsonField.js'
+import getDb from '../db/getDb.js'
 
 const TABLE = 'survey_results_snapshots'
-
-function getDb(options = {}) {
-  return options.db || knex
-}
-
-function parseJsonField(value, fallback) {
-  if (value == null) return fallback
-  if (typeof value === 'string') {
-    try {
-      return JSON.parse(value)
-    } catch {
-      return fallback
-    }
-  }
-  return value
-}
 
 function toCompatShape(row) {
   if (!row) return null
 
-  row.payload = parseJsonField(row.payload, null)
+  parseJsonField(row, 'payload')
   row.answerCount = Number(row.answer_count || 0)
   row.latestAnswerId = row.latest_answer_id == null ? null : Number(row.latest_answer_id)
   row.latestSubmittedAt = row.latest_submitted_at || null

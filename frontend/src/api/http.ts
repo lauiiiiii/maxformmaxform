@@ -1,5 +1,7 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import { useAuthStore } from '../stores/auth'
+import router from '../router'
 
 const http = axios.create({
   baseURL: '/api',
@@ -7,10 +9,10 @@ const http = axios.create({
 })
 
 http.interceptors.request.use(config => {
-  const token = localStorage.getItem('token')
-  if (token) {
+  const authStore = useAuthStore()
+  if (authStore.token) {
     config.headers = config.headers || {}
-    config.headers.Authorization = `Bearer ${token}`
+    config.headers.Authorization = `Bearer ${authStore.token}`
   }
   return config
 })
@@ -36,13 +38,13 @@ http.interceptors.response.use(
 
     if (status === 401) {
       const code = errorData?.code
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
+      const authStore = useAuthStore()
+      authStore.clearAuth()
       if (code === 'TOKEN_EXPIRED') {
         ElMessage.warning('登录已过期，请重新登录')
       }
       if (window.location.pathname !== '/login') {
-        window.location.href = '/login'
+        router.push('/login')
       }
     } else if (status === 403) {
       ElMessage.error('无权限执行此操作')

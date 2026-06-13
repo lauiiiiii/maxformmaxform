@@ -16,8 +16,19 @@ export interface EditorLegacyQuestionDraft {
   optionOrder?: 'none' | 'all' | 'flip' | 'firstFixed' | 'lastFixed'
   hideSystemNumber?: boolean
   validation?: Record<string, unknown>
-  upload?: { maxFiles?: number; maxSizeMb?: number; accept?: string }
-  matrix?: { rows?: string[]; selectionType?: 'single' | 'multiple' }
+  upload?: { maxFiles?: number; maxSizeMb?: number; accept?: string; compressSize?: boolean; compressDimensions?: boolean; maxWidth?: number; maxHeight?: number; watermark?: string }
+  matrix?: {
+    rows?: string[]
+    selectionType?: 'single' | 'multiple'
+    rowTitleWidth?: string
+    rightRowTitle?: boolean
+    rowTitleRandom?: boolean
+    verticalSelect?: boolean
+    singleQuestionAnswer?: boolean
+    mobileLayout?: string
+    optionLimit?: { enabled?: boolean; min?: number; max?: number }
+  }
+  multiFill?: { items?: string[] }
 }
 
 export function isLegacyQuestionOfServerType(type: number | string, serverType: string): boolean {
@@ -44,7 +55,8 @@ export function buildLegacyQuestionDraft(
   const draftConfig = getLegacyQuestionDraftConfig<{
     validation?: Record<string, unknown>
     upload?: { maxFiles?: number; maxSizeMb?: number; accept?: string }
-    matrix?: { rows?: string[]; selectionType?: 'single' | 'multiple' }
+    matrix?: EditorLegacyQuestionDraft['matrix']
+    multiFill?: { items?: string[] }
   }>(type)
 
   if (draftConfig?.validation) {
@@ -57,6 +69,12 @@ export function buildLegacyQuestionDraft(
     question.matrix = {
       ...draftConfig.matrix,
       rows: Array.isArray(draftConfig.matrix.rows) ? [...draftConfig.matrix.rows] : []
+    }
+  }
+  if (draftConfig?.multiFill) {
+    question.multiFill = {
+      ...draftConfig.multiFill,
+      items: Array.isArray(draftConfig.multiFill.items) ? [...draftConfig.multiFill.items] : []
     }
   }
 

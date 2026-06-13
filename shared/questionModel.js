@@ -136,15 +136,38 @@ function buildRatioStats(question, answeredItems, base) {
   }
 }
 
-function buildTextStats(answeredItems, base) {
+function buildTextStats(answeredItems, base, question) {
   const values = answeredItems
-    .map(item => String(item.value).trim())
+    .map(item => formatTextAnswerValue(item.value, question))
     .filter(Boolean)
 
   return {
     ...base,
     sampleAnswers: Array.from(new Set(values)).slice(0, 5)
   }
+}
+
+function formatTextAnswerValue(value, question) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const itemLabelByValue = new Map(
+      (Array.isArray(question?.multiFill?.items) ? question.multiFill.items : [])
+        .map((item, index) => {
+          if (item && typeof item === 'object') {
+            return [String(item.value ?? index + 1), String(item.label ?? item.text ?? `填空${index + 1}`)]
+          }
+          return [String(index + 1), String(item ?? `填空${index + 1}`)]
+        })
+    )
+    return Object.entries(value)
+      .map(([key, raw]) => {
+        const text = String(raw ?? '').trim()
+        const label = itemLabelByValue.get(String(key)) || String(key)
+        return text ? `${label}：${text}` : ''
+      })
+      .filter(Boolean)
+      .join('；')
+  }
+  return String(value ?? '').trim()
 }
 
 function buildDateStats(answeredItems, base) {
@@ -283,7 +306,7 @@ export function buildQuestionStats(questions, submissions, options = {}) {
     }
 
     if (analyticsKind === 'text') {
-      return [type === 'date' ? buildDateStats(answeredItems, base) : buildTextStats(answeredItems, base)]
+      return [type === 'date' ? buildDateStats(answeredItems, base) : buildTextStats(answeredItems, base, question)]
     }
 
     if (analyticsKind === 'metric') {

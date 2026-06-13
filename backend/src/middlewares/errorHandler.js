@@ -5,6 +5,17 @@ export function errorHandler(err, req, res, _next) {
     return res.status(413).json({ success: false, error: { code: 'PAYLOAD_TOO_LARGE', message: '请求体过大' } })
   }
 
+  if (err.name === 'MulterError' || String(err.code || '').startsWith('LIMIT_')) {
+    const isFileSize = err.code === 'LIMIT_FILE_SIZE'
+    return res.status(isFileSize ? 413 : 400).json({
+      success: false,
+      error: {
+        code: isFileSize ? 'FILE_TOO_LARGE' : (err.code || 'UPLOAD_ERROR'),
+        message: isFileSize ? '文件大小超过限制' : (err.message || '文件上传失败')
+      }
+    })
+  }
+
   const status = err.status || 500
   res.status(status).json({
     success: false,

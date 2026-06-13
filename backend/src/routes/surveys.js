@@ -26,7 +26,7 @@ import {
 import { generateSurveyDraftByAi, getSurveyAiProtocol } from '../services/surveyAiService.js'
 import { getManagedSurveyResults } from '../services/surveyResultsService.js'
 import { submitSurveyResponseForRequest, uploadSurveyFileForRequest } from '../services/surveyUploadService.js'
-import { upload } from '../utils/uploadStorage.js'
+import { surveyUpload } from '../utils/uploadStorage.js'
 import { createSurveySubmissionDto } from '../../../shared/surveyUpload.contract.js'
 
 const router = Router()
@@ -169,7 +169,7 @@ router.put('/:id/folder', authRequired, asyncRoute(async (req, res) => {
   res.json({ success: true, data: updated })
 }))
 
-router.post('/:id/uploads', optionalAuth, publicUploadLimiter, upload.single('file'), asyncRoute(async (req, res) => {
+router.post('/:id/uploads', optionalAuth, publicUploadLimiter, surveyUpload.single('file'), asyncRoute(async (req, res) => {
   const data = await uploadSurveyFileForRequest({
     actor: req.user,
     identifier: req.params.id,

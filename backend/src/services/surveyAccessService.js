@@ -8,24 +8,7 @@ import {
   isSurveyExpired
 } from '../policies/surveyPolicy.js'
 import { SURVEY_ERROR_CODES, SURVEY_STATUS } from '../../../shared/survey.contract.js'
-
-function createHttpError(status, code, message) {
-  return Object.assign(new Error(message), { status, code })
-}
-
-function createResponseError(status, body) {
-  const error = Object.assign(new Error(body?.error?.message || 'Request failed'), {
-    status,
-    body
-  })
-  if (body?.error?.code) error.code = body.error.code
-  return error
-}
-
-function throwPolicyError(policy) {
-  if (policy.allowed) return
-  throw createResponseError(policy.status, policy.body)
-}
+import { createHttpError, createResponseError, throwPolicyError } from '../http/errors.js'
 
 export async function resolveRequestedSurveyCreatorId({ actor, query = {} }) {
   const { creator_id, createdBy } = query
@@ -47,7 +30,12 @@ export async function getSurveyOrThrow(identifier, options = {}) {
 }
 
 export async function getSharedSurveyOrThrow(shareCode, options = {}) {
-  const survey = await surveyRepository.findByShareCode(shareCode, options)
+  const normalizedShareCode = String(shareCode || '').trim()
+  if (!normalizedShareCode || /^\d+$/.test(normalizedShareCode)) {
+    throw createHttpError(404, SURVEY_ERROR_CODES.NOT_FOUND, 'Survey not found')
+  }
+
+  const survey = await surveyRepository.findByShareCode(normalizedShareCode, options)
   if (!survey) {
     throw createHttpError(404, SURVEY_ERROR_CODES.NOT_FOUND, 'Survey not found')
   }

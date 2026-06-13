@@ -1,10 +1,6 @@
-import knex from '../db/knex.js'
+import getDb from '../db/getDb.js'
 
 const TABLE = 'audit_logs'
-
-function getDb(options = {}) {
-  return options.db || knex
-}
 
 function toDto(row) {
   if (!row) return null
@@ -35,8 +31,9 @@ const AuditLog = {
     return db(TABLE).where('id', id).first().then(toDto)
   },
 
-  async list({ page = 1, pageSize = 20, username, action, targetType } = {}) {
-    let q = knex(TABLE)
+  async list({ page = 1, pageSize = 20, username, action, targetType } = {}, options = {}) {
+    const db = getDb(options)
+    let q = db(TABLE)
     if (username) q = q.where('actor_username', 'like', `%${username}%`)
     if (action) q = q.where('action', 'like', `%${action}%`)
     if (targetType) q = q.where('target_type', 'like', `%${targetType}%`)

@@ -371,15 +371,15 @@
     <div v-if="showBatchDialog" class="logic-mask" @click.self="closeBatchDialog()">
       <div class="logic-dialog batch-dialog">
         <div class="logic-hd">
-          <div class="logic-tt">批量编辑选项</div>
+          <div class="logic-tt">{{ batchDialogTitle }}</div>
           <button class="btn btn-link" @click="closeBatchDialog">✕</button>
         </div>
         <div class="logic-bd batch-body">
           <div class="batch-left">
-            <textarea v-model="batchText" class="batch-textarea" placeholder="每行一个选项；空行自动忽略；可直接粘贴Excel的一列" rows="18"></textarea>
+            <textarea v-model="batchText" class="batch-textarea" :placeholder="batchDialogPlaceholder" rows="18"></textarea>
             <div class="tip-muted" style="margin-top:8px;">共 {{ batchLineCount }} 行</div>
           </div>
-          <div class="batch-right">
+          <div v-if="showBatchPresets" class="batch-right">
             <div class="preset-title">预设选项</div>
             <div class="preset-list">
               <button class="chip" v-for="p in presetNames" :key="p" @click="usePreset(p)">{{ p }}</button>
@@ -387,7 +387,7 @@
           </div>
         </div>
         <div class="logic-ft">
-          <div class="tip-muted">保存后将覆盖当前题目的选项；原有“选项关联/跳题(按选项)”会被清理。</div>
+          <div class="tip-muted">保存后将覆盖当前内容；编辑选项时原有“选项关联/跳题(按选项)”会被清理。</div>
           <div>
             <button class="btn btn-outline" @click="closeBatchDialog">取消</button>
             <button class="btn btn-primary" @click="saveBatchEdit">确定</button>
@@ -631,8 +631,11 @@ const {
   saveBatchAddQuestions,
   showBatchDialog,
   closeBatchDialog,
+  batchDialogTitle,
+  batchDialogPlaceholder,
   batchText,
   batchLineCount,
+  showBatchPresets,
   presetNames,
   usePreset,
   saveBatchEdit,

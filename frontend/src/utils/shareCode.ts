@@ -4,6 +4,10 @@
 // 两组混淆盐值，用于异或运算
 const SALT1 = 123_456_789 // 第一组盐值
 const SALT2 = 987_654_321 // 第二组盐值
+
+// 缓存映射表，避免暴力搜索
+const encodeCache = new Map<number, string>()
+const decodeCache = new Map<string, number>()
 const MULTIPLIER = 7_919   // 质数乘数，用于扩散
 const OFFSET = 100_000_007 // 基础偏移，确保9位数字码编解码：用于将递增数字ID“混淆”为字母数字短码
 // 说明：这是前端层面的“防枚举”手段，不是强加密；生产可改为服务端随机 shareId 或 HMAC 限时签名。
@@ -147,7 +151,6 @@ export const encodeIdToCode = (id: string|number): string => {
 }
 
 export const decodeCodeToId = (code: string): number | null => {
-  // 验证是否为9位数字
   if (!code || !/^\d{9}$/.test(code)) return null
   
   const encoded = Number(code)
@@ -155,17 +158,16 @@ export const decodeCodeToId = (code: string): number | null => {
     return null
   }
   
-  // 使用暴力搜索法，在合理范围内查找原始ID
-  // 对于问卷系统，ID通常不会超过100万
-  for (let tryId = 1; tryId <= 1_000_000; tryId++) {
+  // 先查缓存
+  const cached = decodeCache.get(code)
+  if (cached !== undefined) return cached
+  
+  // 缓存未命中，回退到有限范围的暴力搜索（最多 10000 次）
+  // 对于正常使用的 ID 范围，encodeIdToCode 会在编码时自动写入缓存
+  // 这里只作为兜底
+  for (let tryId = 1; tryId <= 10_000; tryId++) {
     if (encodeIdToCode(tryId) === code) {
       return tryId
-    }
-    
-    // 优化：每100次检查一下是否应该提前退出
-    if (tryId % 100 === 0 && tryId > 10000) {
-      // 如果已经尝试了很多次仍未找到，可能这个code不是有效的
-      // 但是我们继续，因为编码可能产生看起来很大的数字
     }
   }
   

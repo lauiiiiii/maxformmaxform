@@ -1,10 +1,6 @@
-import knex from '../db/knex.js'
+import getDb from '../db/getDb.js'
 
 const TABLE = 'roles'
-
-function getDb(options = {}) {
-  return options.db || knex
-}
 
 function parseJson(row) {
   if (!row) return null

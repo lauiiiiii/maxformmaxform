@@ -17,7 +17,12 @@ export function throwAuthPolicyError(policy) {
 
   const status = Number(policy?.status) || 403
   if (status === 401) {
-    throwPolicyError(policy)
+    throwAuthError(
+      401,
+      AUTH_ERROR_CODES.INVALID_TOKEN,
+      policy?.body?.error?.message || 'Authentication required'
+    )
+    return
   }
 
   throwAuthError(

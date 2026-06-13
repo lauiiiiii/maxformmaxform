@@ -30,6 +30,12 @@ async function resolveManagedSurvey({ actor, surveyId, survey }) {
   return getManagedSurveyForAnswerRequest({ actor, surveyId })
 }
 
+function getQuestionTitle(questions = [], order) {
+  if (!Array.isArray(questions)) return null
+  const q = questions.find(q => Number(q?.order || q?.id) === Number(order))
+  return q?.title || `Q${order}`
+}
+
 export async function createSurveyAnswersWorkbookExport({ actor, surveyId, survey }) {
   const managedSurvey = await resolveManagedSurvey({ actor, surveyId, survey })
   const answers = await answerRepository.listBySurveyId(managedSurvey.id)
@@ -46,9 +52,26 @@ export async function createSurveyAnswersWorkbookExport({ actor, surveyId, surve
   ]
 
   for (const answer of answers) {
+    const answersData = Array.isArray(answer.answers_data) ? answer.answers_data : []
+    // 对上传题答案优化展示：提取文件URL和名称
+    const displayData = answersData.map(item => {
+      if (item?.questionType === 'upload' && Array.isArray(item?.value)) {
+        const files = item.value.map(f => ({
+          name: f.name || 'unknown',
+          url: f.url || '',
+          size: f.size || 0
+        }))
+        return {
+          ...item,
+          value: files.map(f => `${f.name} (${f.url})`).join(' | '),
+          _rawFiles: files
+        }
+      }
+      return item
+    })
     sheet.addRow({
       ...answer,
-      answers_data: JSON.stringify(answer.answers_data)
+      answers_data: JSON.stringify(displayData)
     })
   }
 
@@ -65,12 +88,26 @@ export async function createSurveyAnswerAttachmentsArchive({ actor, surveyId, su
   const existingFiles = resolveExistingAnswerFiles(files)
   throwAnswerPolicyError(getAnswerAttachmentsAvailablePolicy(existingFiles))
 
-  const archive = archiver('zip', { zlib: { level: 9 } })
+  // 按题目分组，目录结构更清晰
+  const byQuestion = new Map()
   for (const file of existingFiles) {
-    const safeName = sanitizeArchiveEntryName(file.name || path.basename(file.filePath))
-    archive.file(file.filePath, {
-      name: `answer-${file.answer_id}/${file.id}-${safeName}`
-    })
+    const order = file.question_order || 'unknown'
+    if (!byQuestion.has(order)) byQuestion.set(order, [])
+    byQuestion.get(order).push(file)
+  }
+
+  const questions = managedSurvey?.questions || []
+  const archive = archiver('zip', { zlib: { level: 9 } })
+
+  for (const [order, questionFiles] of byQuestion) {
+    const questionLabel = getQuestionTitle(questions, order) || `Q${order}`
+    const dirName = sanitizeArchiveEntryName(`${order}_${questionLabel}`)
+    for (const file of questionFiles) {
+      const safeName = sanitizeArchiveEntryName(file.name || path.basename(file.filePath))
+      archive.file(file.filePath, {
+        name: `${dirName}/answer-${file.answer_id}/${safeName}`
+      })
+    }
   }
 
   return {

@@ -83,3 +83,18 @@ test('GET /api/surveys/share/:code returns a public survey through the service f
   assert.equal(json.data.title, 'Shared Survey')
 })
 
+test('GET /api/surveys/share/:code rejects legacy numeric ids', async () => {
+  let lookupCalled = false
+  Survey.findByShareCode = async () => {
+    lookupCalled = true
+    return { id: 6, creator_id: 1, status: 'published', title: 'Legacy ID Survey' }
+  }
+
+  const { response, json } = await requestPublic('/surveys/share/6')
+
+  assert.equal(response.status, 404)
+  assert.equal(json.success, false)
+  assert.equal(json.error.code, 'NOT_FOUND')
+  assert.equal(lookupCalled, false)
+})
+

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="answers-dashboard">
     <aside class="dashboard-sidebar">
       <div class="sidebar-header">
@@ -347,8 +347,8 @@
               />
               <div class="file-toolbar">
                 <div class="file-summary">
-                  <span class="text-pill">有效答卷 {{ formatNumber(question.totalAnswers) }}</span>
-                  <span class="text-pill">文件总数 {{ formatNumber(question.totalFiles) }}</span>
+                  <span class="text-pill"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M3 2h7l3 3v9a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" fill="#6b7280"/><path d="M10 2v3h3" fill="#d1d5db"/></svg> 有效答卷 {{ formatNumber(question.totalAnswers) }}</span>
+                  <span class="text-pill"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M1 3h14v2H1zM1 7h14v2H1zM1 11h14v2H1z" fill="#6b7280"/></svg> 文件总数 {{ formatNumber(question.totalFiles) }}</span>
                 </div>
                 <button class="btn ghost btn-compact" :disabled="!hasAttachmentFiles || isDownloadingAttachments" @click="downloadAttachmentBundle">
                   {{ isDownloadingAttachments ? '打包中...' : '下载全部附件' }}
@@ -363,11 +363,22 @@
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <span class="file-name">{{ file.name }}</span>
-                  <span class="file-meta">{{ formatFileSize(file.size) }}</span>
+                  <div class="file-icon">
+                    <template v-if="isResultImageFile(file)">
+                      <img class="file-thumb" :src="file.url" :alt="file.name" @error="onFileThumbError($event)" />
+                    </template>
+                    <template v-else>
+                      <span class="file-type-emoji">{{ getResultFileEmoji(file) }}</span>
+                    </template>
+                  </div>
+                  <div class="file-detail">
+                    <span class="file-name">{{ file.name }}</span>
+                    <span class="file-meta">{{ formatFileSize(file.size) }}{{ file.type ? ' · ' + getSimpleFileType(file.type) : '' }}</span>
+                  </div>
+                  <svg class="file-download-icon" viewBox="0 0 16 16" width="16" height="16"><path d="M8 1v10M4 7l4 4 4-4M2 13h12" stroke="#94a3b8" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 </a>
               </div>
-              <p v-else>暂无文件样本。</p>
+              <div v-else class="file-empty">暂无文件样本。</div>
             </div>
 
             <div v-else class="question-text">
@@ -424,7 +435,13 @@
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                <span>{{ file.name }}</span>
+                <span class="download-sample__icon">
+                  <template v-if="isResultImageFile(file)">
+                    <img class="download-sample__thumb" :src="file.url" :alt="file.name" />
+                  </template>
+                  <template v-else>{{ getResultFileEmoji(file) }}</template>
+                </span>
+                <span class="download-sample__name">{{ file.name }}</span>
                 <strong>{{ formatFileSize(file.size) }}</strong>
               </a>
             </div>
@@ -827,6 +844,43 @@ function formatFileSize(size?: number | null): string {
   if (num >= 1024 * 1024) return `${(num / (1024 * 1024)).toFixed(1)} MB`
   if (num >= 1024) return `${(num / 1024).toFixed(1)} KB`
   return `${num} B`
+}
+
+function isResultImageFile(file: { type?: string; url?: string }): boolean {
+  const type = (file.type || '').toLowerCase()
+  if (type.startsWith('image/')) return true
+  const url = (file.url || '').toLowerCase()
+  return /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url)
+}
+
+function getResultFileEmoji(file: { type?: string }): string {
+  const type = (file.type || '').toLowerCase()
+  if (type.includes('pdf')) return '📄'
+  if (type.includes('word') || type.includes('document')) return '📝'
+  if (type.includes('sheet') || type.includes('excel') || type.includes('spreadsheet')) return '📊'
+  if (type.startsWith('image/')) return '🖼️'
+  if (type.includes('zip') || type.includes('compressed') || type.includes('rar')) return '📦'
+  return '📎'
+}
+
+function getSimpleFileType(mime: string): string {
+  const type = mime.toLowerCase()
+  if (type.includes('pdf')) return 'PDF'
+  if (type.includes('word') || type.includes('document')) return 'DOC'
+  if (type.includes('sheet') || type.includes('excel') || type.includes('spreadsheet')) return 'XLS'
+  if (type.startsWith('image/jpeg')) return 'JPG'
+  if (type.startsWith('image/png')) return 'PNG'
+  if (type.startsWith('image/')) return 'IMG'
+  if (type.includes('zip') || type.includes('compressed')) return 'ZIP'
+  return ''
+}
+
+function onFileThumbError(event: Event) {
+  const target = event.target as HTMLImageElement
+  if (target?.parentElement) {
+    target.style.display = 'none'
+    target.parentElement.innerHTML = '<span class="file-type-emoji">🖼️</span>'
+  }
 }
 
 function normalizeQuestionStat(stat: any): CategoryStatItem | null {
@@ -2550,5 +2604,130 @@ watch(() => props.surveyId, () => {
   .option-value {
     text-align: left;
   }
+}
+
+/* 文件展示增强 */
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.15s;
+}
+
+.file-item:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.file-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.file-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.file-type-emoji {
+  font-size: 20px;
+}
+
+.file-detail {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.file-name {
+  font-size: 13px;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-meta {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.file-download-icon {
+  flex-shrink: 0;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+
+.file-item:hover .file-download-icon {
+  opacity: 0.7;
+}
+
+.file-empty {
+  text-align: center;
+  padding: 20px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+/* 下载样本增强 */
+.download-sample {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.15s;
+}
+
+.download-sample:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.download-sample__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  font-size: 18px;
+}
+
+.download-sample__thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.download-sample__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

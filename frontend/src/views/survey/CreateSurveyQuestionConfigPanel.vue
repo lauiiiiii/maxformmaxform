@@ -34,12 +34,12 @@
             <div class="type-item" @click="addQuestionByType(1)"><el-icon class="type-icon"><Edit /></el-icon><span>单项填空</span></div>
             <div class="type-item" @click="addQuestionByType(9)"><el-icon class="type-icon"><EditPen /></el-icon><span>多项填空</span></div>
             <div class="type-item" @click="addQuestionByType(2)"><el-icon class="type-icon"><EditPen /></el-icon><span>简答题</span></div>
-            <div class="type-item" @click="addQuestionByType(27)"><el-icon class="type-icon"><Document /></el-icon><span>表格填空</span></div>
-            <div class="type-item" @click="addQuestionByType(28)"><el-icon class="type-icon"><Collection /></el-icon><span>表格量表</span></div>
-            <div class="type-item" @click="addQuestionByType(4)"><el-icon class="type-icon"><EditPen /></el-icon><span>签名题</span></div>
+            <div class="type-item type-item--pending" @click="addQuestionByType(27)"><el-icon class="type-icon"><Document /></el-icon><span>表格填空</span></div>
+            <div class="type-item type-item--pending" @click="addQuestionByType(28)"><el-icon class="type-icon"><Collection /></el-icon><span>表格量表</span></div>
+            <div class="type-item type-item--pending" @click="showPendingQuestionType('签名题')"><el-icon class="type-icon"><EditPen /></el-icon><span>签名题</span></div>
             <div class="type-item" @click="addQuestionByType(14)"><el-icon class="type-icon"><Calendar /></el-icon><span>日期</span></div>
-            <div class="type-item" @click="addQuestionByType(15)"><el-icon class="type-icon"><HelpFilled /></el-icon><span>AI 协助</span></div>
-            <div class="type-item" @click="addQuestionByType(16)"><el-icon class="type-icon"><ChatLineRound /></el-icon><span>AI 问答</span></div>
+            <div class="type-item type-item--pending" @click="addQuestionByType(15)"><el-icon class="type-icon"><HelpFilled /></el-icon><span>AI 协助</span></div>
+            <div class="type-item type-item--pending" @click="addQuestionByType(16)"><el-icon class="type-icon"><ChatLineRound /></el-icon><span>AI 问答</span></div>
           </div>
         </div>
 
@@ -49,10 +49,10 @@
             <span>分页说明</span>
           </div>
           <div class="type-list" v-show="categoryExpanded.paging">
-            <div class="type-item" @click="addQuestionByType(17)"><el-icon class="type-icon"><Document /></el-icon><span>分页符</span></div>
+            <div class="type-item type-item--pending" @click="addQuestionByType(17)"><el-icon class="type-icon"><Document /></el-icon><span>分页符</span></div>
             <div class="type-item" @click="addQuestionByType(18)"><el-icon class="type-icon"><Document /></el-icon><span>段落说明</span></div>
-            <div class="type-item" @click="addQuestionByType(18)"><el-icon class="type-icon"><Timer /></el-icon><span>分页计时器</span></div>
-            <div class="type-item" @click="addQuestionByType(19)"><el-icon class="type-icon"><Fold /></el-icon><span>折叠分组</span></div>
+            <div class="type-item type-item--pending" @click="showPendingQuestionType('分页计时器')"><el-icon class="type-icon"><Timer /></el-icon><span>分页计时器</span></div>
+            <div class="type-item type-item--pending" @click="addQuestionByType(19)"><el-icon class="type-icon"><Fold /></el-icon><span>折叠分组</span></div>
           </div>
         </div>
 
@@ -65,12 +65,12 @@
             <div class="type-item" @click="addQuestionByType(20)"><el-icon class="type-icon"><Collection /></el-icon><span>矩阵单选</span></div>
             <div class="type-item" @click="addQuestionByType(21)"><el-icon class="type-icon"><Collection /></el-icon><span>矩阵多选</span></div>
             <div class="type-item" @click="addQuestionByType(22)"><el-icon class="type-icon"><DataLine /></el-icon><span>矩阵量表</span></div>
-            <div class="type-item" @click="addQuestionByType(25)"><el-icon class="type-icon"><Collection /></el-icon><span>矩阵填空</span></div>
-            <div class="type-item" @click="addQuestionByType(23)"><el-icon class="type-icon"><DataLine /></el-icon><span>矩阵滑动条</span></div>
+            <div class="type-item type-item--pending" @click="addQuestionByType(25)"><el-icon class="type-icon"><Collection /></el-icon><span>矩阵填空</span></div>
+            <div class="type-item type-item--pending" @click="addQuestionByType(23)"><el-icon class="type-icon"><DataLine /></el-icon><span>矩阵滑动条</span></div>
             <div class="type-item" @click="addQuestionByType(24)"><el-icon class="type-icon"><List /></el-icon><span>矩阵下拉题</span></div>
-            <div class="type-item" @click="addQuestionByType(26)"><el-icon class="type-icon"><Collection /></el-icon><span>矩阵组合</span></div>
-            <div class="type-item" @click="addQuestionByType(28)"><el-icon class="type-icon"><Collection /></el-icon><span>表格组合</span></div>
-            <div class="type-item" @click="addQuestionByType(28)"><el-icon class="type-icon"><Document /></el-icon><span>自填表格</span></div>
+            <div class="type-item type-item--pending" @click="addQuestionByType(26)"><el-icon class="type-icon"><Collection /></el-icon><span>矩阵组合</span></div>
+            <div class="type-item type-item--pending" @click="addQuestionByType(28)"><el-icon class="type-icon"><Collection /></el-icon><span>表格组合</span></div>
+            <div class="type-item type-item--pending" @click="addQuestionByType(28)"><el-icon class="type-icon"><Document /></el-icon><span>自填表格</span></div>
           </div>
         </div>
 
@@ -82,9 +82,9 @@
           <div class="type-list" v-show="categoryExpanded.rating">
             <div class="type-item" @click="addQuestionByType(29)"><el-icon class="type-icon"><StarFilled /></el-icon><span>星亮题</span></div>
             <div class="type-item" @click="addQuestionByType(30)"><el-icon class="type-icon"><Histogram /></el-icon><span>NPS 量表</span></div>
-            <div class="type-item" @click="addQuestionByType(31)"><el-icon class="type-icon"><Star /></el-icon><span>评分单选</span></div>
-            <div class="type-item" @click="addQuestionByType(32)"><el-icon class="type-icon"><Star /></el-icon><span>评分多选</span></div>
-            <div class="type-item" @click="addQuestionByType(33)"><el-icon class="type-icon"><Histogram /></el-icon><span>评分矩阵</span></div>
+            <div class="type-item type-item--pending" @click="addQuestionByType(31)"><el-icon class="type-icon"><Star /></el-icon><span>评分单选</span></div>
+            <div class="type-item type-item--pending" @click="addQuestionByType(32)"><el-icon class="type-icon"><Star /></el-icon><span>评分多选</span></div>
+            <div class="type-item type-item--pending" @click="addQuestionByType(33)"><el-icon class="type-icon"><Histogram /></el-icon><span>评分矩阵</span></div>
             <div class="type-item" @click="addQuestionByType(34)"><el-icon class="type-icon"><Tickets /></el-icon><span>评价题</span></div>
           </div>
         </div>
@@ -98,12 +98,12 @@
             <div class="type-item" @click="addQuestionByType(11)"><el-icon class="type-icon"><Sort /></el-icon><span>排序</span></div>
             <div class="type-item" @click="addQuestionByType(36)"><el-icon class="type-icon"><DataLine /></el-icon><span>比重题</span></div>
             <div class="type-item" @click="addQuestionByType(8)"><el-icon class="type-icon"><DataLine /></el-icon><span>滑动条</span></div>
-            <div class="type-item" @click="addQuestionByType(37)"><el-icon class="type-icon"><Picture /></el-icon><span>图像 OCR</span></div>
-            <div class="type-item" @click="addQuestionByType(39)"><el-icon class="type-icon"><Picture /></el-icon><span>图像题</span></div>
-            <div class="type-item" @click="addQuestionByType(38)"><el-icon class="type-icon"><Microphone /></el-icon><span>答题录音</span></div>
-            <div class="type-item" @click="addQuestionByType(40)"><el-icon class="type-icon"><Calendar /></el-icon><span>预约</span></div>
-            <div class="type-item" @click="addQuestionByType(41)"><el-icon class="type-icon"><VideoCamera /></el-icon><span>视频题</span></div>
-            <div class="type-item" @click="addQuestionByType(42)"><el-icon class="type-icon"><Link /></el-icon><span>VlookUp 问卷关联</span></div>
+            <div class="type-item type-item--pending" @click="addQuestionByType(37)"><el-icon class="type-icon"><Picture /></el-icon><span>图像 OCR</span></div>
+            <div class="type-item type-item--pending" @click="addQuestionByType(39)"><el-icon class="type-icon"><Picture /></el-icon><span>图像题</span></div>
+            <div class="type-item type-item--pending" @click="addQuestionByType(38)"><el-icon class="type-icon"><Microphone /></el-icon><span>答题录音</span></div>
+            <div class="type-item type-item--pending" @click="addQuestionByType(40)"><el-icon class="type-icon"><Calendar /></el-icon><span>预约</span></div>
+            <div class="type-item type-item--pending" @click="addQuestionByType(41)"><el-icon class="type-icon"><VideoCamera /></el-icon><span>视频题</span></div>
+            <div class="type-item type-item--pending" @click="addQuestionByType(42)"><el-icon class="type-icon"><Link /></el-icon><span>VlookUp 问卷关联</span></div>
           </div>
         </div>
       </div>
@@ -359,7 +359,7 @@
           @dragover.prevent="onOutlineDragOver(i, $event)"
           @drop="onOutlineDrop(i)"
           @dragend="onOutlineDragEnd"
-          @click="editingIndex = i; currentTab = 'edit'"
+          @click="openQuestionEdit(i)"
           @dblclick="startRename(i, q)"
         >
           <span class="drag-handle" draggable="true" @dragstart="onOutlineDragStart(i, $event)">☰</span>
@@ -450,7 +450,7 @@ const {
   onOutlineDrop,
   onOutlineDragEnd,
   editingIndex,
-  currentTab,
+  openQuestionEdit,
   startRename,
   renamingIndex,
   renameText,
@@ -458,6 +458,10 @@ const {
   confirmRename,
   getQuestionTypeLabel
 } = props.context
+
+function showPendingQuestionType(name: string) {
+  alert(`${name} 正在开发中。`)
+}
 
 const authStore = useAuthStore()
 

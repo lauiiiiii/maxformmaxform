@@ -18,7 +18,18 @@ export interface LegacyQuestionDraft {
   options?: Array<string | QuestionOptionDTO>
   validation?: Record<string, unknown>
   upload?: Record<string, unknown>
-  matrix?: { rows?: Array<string | QuestionOptionDTO>; selectionType?: string }
+  matrix?: {
+    rows?: Array<string | QuestionOptionDTO>
+    selectionType?: string
+    rowTitleWidth?: string
+    rightRowTitle?: boolean
+    rowTitleRandom?: boolean
+    verticalSelect?: boolean
+    singleQuestionAnswer?: boolean
+    mobileLayout?: string
+    optionLimit?: { enabled?: boolean; min?: number; max?: number }
+  }
+  multiFill?: { items?: Array<string | Record<string, unknown>> }
   logic?: QuestionLogicDTO
   jumpLogic?: QuestionJumpLogicDTO
   optionGroups?: QuestionOptionGroupDTO[]

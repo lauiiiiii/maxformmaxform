@@ -125,7 +125,7 @@ export async function migrate() {
       t.string('name', 255).notNullable()
       t.string('url', 500).notNullable()
       t.integer('size').unsigned().defaultTo(0)
-      t.string('type', 50).nullable()
+      t.string('type', 120).nullable()
       t.integer('uploader_id').unsigned().nullable()
       t.integer('survey_id').unsigned().nullable()
       t.integer('question_order').unsigned().nullable()
@@ -379,6 +379,9 @@ export async function migrate() {
   }
 
   if (!createdTables.files && await knex.schema.hasTable('files')) {
+    await knex.schema.alterTable('files', t => {
+      t.string('type', 120).nullable().alter()
+    })
     if (!await knex.schema.hasColumn('files', 'survey_id')) {
       await knex.schema.alterTable('files', t => {
         t.integer('survey_id').unsigned().nullable().index()

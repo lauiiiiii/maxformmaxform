@@ -1,10 +1,6 @@
-import knex from '../db/knex.js'
+import getDb from '../db/getDb.js'
 
 const TABLE = 'management_ai_executions'
-
-function getDb(options = {}) {
-  return options.db || knex
-}
 
 function applyListFilters(query, filters = {}) {
   const { action, status, actor_id, created_from, created_to, batch_id, parent_execution_id, step_id, error_stage, error_class, retryable } = filters

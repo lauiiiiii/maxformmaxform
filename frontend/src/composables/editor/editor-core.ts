@@ -42,6 +42,24 @@ export interface SurveyEditorOptionExtra {
   fillPlaceholder: string
 }
 
+export interface SurveyEditorMatrixOptionLimit {
+  enabled: boolean
+  min: number
+  max: number
+}
+
+export interface SurveyEditorMatrixConfig {
+  rows?: string[]
+  selectionType?: 'single' | 'multiple'
+  rowTitleWidth?: string
+  rightRowTitle?: boolean
+  rowTitleRandom?: boolean
+  verticalSelect?: boolean
+  singleQuestionAnswer?: boolean
+  mobileLayout?: 'auto' | 'inline' | 'stacked' | string
+  optionLimit?: Partial<SurveyEditorMatrixOptionLimit>
+}
+
 export interface SurveyEditorQuestion {
   id: string
   type: number
@@ -51,9 +69,9 @@ export interface SurveyEditorQuestion {
   description?: string
   required: boolean
   options?: string[]
-  matrix?: {
-    rows?: string[]
-    selectionType?: 'single' | 'multiple'
+  matrix?: SurveyEditorMatrixConfig
+  multiFill?: {
+    items?: string[]
   }
   optionOrder?: 'none' | 'all' | 'flip' | 'firstFixed' | 'lastFixed'
   hideSystemNumber?: boolean
@@ -62,6 +80,11 @@ export interface SurveyEditorQuestion {
     maxFiles?: number
     maxSizeMb?: number
     accept?: string
+    compressSize?: boolean
+    compressDimensions?: boolean
+    maxWidth?: number
+    maxHeight?: number
+    watermark?: string
   }
   logic?: QuestionLogicDTO
   jumpLogic?: QuestionJumpLogicDTO
@@ -171,6 +194,29 @@ function createAiJsonImportMeta() {
   }
 }
 
+const MATRIX_ROW_TITLE_WIDTH_OPTIONS = ['', '10%', '15%', '20%', '30%', '40%', '50%', '60%', '70%', '80%', '90%']
+const MATRIX_MOBILE_LAYOUT_OPTIONS = [
+  { value: 'auto', label: '自动显示' },
+  { value: 'inline', label: '同行显示' },
+  { value: 'stacked', label: '换行显示' }
+]
+
+function createDefaultOptionExtra(): SurveyEditorOptionExtra {
+  return {
+    quotaLimit: 0,
+    quotaEnabled: true,
+    rich: false,
+    hasDesc: false,
+    desc: '',
+    exclusive: false,
+    defaultSelected: false,
+    hidden: false,
+    fillEnabled: false,
+    fillRequired: false,
+    fillPlaceholder: ''
+  }
+}
+
 function withAiQuestionAnnotations(payload: AiImportedSurveyPayload, aiMeta?: Record<string, unknown>): AiImportedSurveyPayload {
   const normalizedAiMeta = mergeAiMeta(aiMeta)
   const aiTags = normalizedAiMeta ? [QUESTION_BANK_AI_TAG] : undefined
@@ -249,7 +295,7 @@ export function useEditorCore() {
   const computedShareLink = computed(() => {
     const host = location?.origin || ''
     const code = shareId.value.trim()
-    return /^\d{9}$/.test(code) ? `${host}/s/${code}` : ''
+    return code ? `${host}/s/${encodeURIComponent(code)}` : ''
   })
 
   function onOutlineDragStart(index: number, event: DragEvent) {
@@ -334,6 +380,13 @@ export function useEditorCore() {
     editingIndex.value = -1
   }
 
+  function openQuestionEdit(index: number) {
+    if (!Number.isInteger(index) || index < 0 || index >= surveyForm.questions.length) return
+    normalizeQuestionForEditor(surveyForm.questions[index])
+    editingIndex.value = index
+    currentTab.value = 'edit'
+  }
+
   function copyShareLink() {
     navigator.clipboard?.writeText(computedShareLink.value)
   }
@@ -368,6 +421,10 @@ export function useEditorCore() {
     return isLegacyQuestionOfServerType(type, 'matrix')
   }
 
+  function isMultiFillLegacyQuestion(type: number | string): boolean {
+    return Number(type) === 9
+  }
+
   function isSliderLegacyQuestion(type: number | string): boolean {
     return isLegacyQuestionOfServerType(type, 'slider')
   }
@@ -387,10 +444,11 @@ export function useEditorCore() {
   const generateQuestionId = (): string => generateQuestionIdUtil('q')
 
   function buildLegacyQuestion(type: number): SurveyEditorQuestion {
-    return buildLegacyQuestionDraft(type, {
+    const question = buildLegacyQuestionDraft(type, {
       id: generateQuestionId(),
       hideSystemNumber: areAllNumbersHidden.value
     }) as SurveyEditorQuestion
+    return normalizeQuestionForEditor(question)
   }
 
   function createDefaultQuestion(type: number): SurveyEditorQuestion {
@@ -398,7 +456,7 @@ export function useEditorCore() {
   }
 
   function buildEditorQuestionFromServerQuestion(question: any): SurveyEditorQuestion {
-    return {
+    const editorQuestion: SurveyEditorQuestion = {
       id: question.id ? String(question.id) : generateQuestionId(),
       type: mapServerTypeToLegacy(question.type || 'input', question.uiType),
       uiType: question.uiType == null ? undefined : Number(question.uiType),
@@ -410,7 +468,28 @@ export function useEditorCore() {
       matrix: question.matrix
         ? {
             rows: Array.isArray(question.matrix.rows) ? question.matrix.rows.map((row: any) => row.label ?? String(row)) : [],
-            selectionType: question.matrix.selectionType === 'multiple' ? 'multiple' : 'single'
+            selectionType: question.matrix.selectionType === 'multiple' ? 'multiple' : 'single',
+            rowTitleWidth: String(question.matrix.rowTitleWidth || '30%'),
+            rightRowTitle: !!question.matrix.rightRowTitle,
+            rowTitleRandom: !!question.matrix.rowTitleRandom,
+            verticalSelect: !!question.matrix.verticalSelect,
+            singleQuestionAnswer: !!question.matrix.singleQuestionAnswer,
+            mobileLayout: String(question.matrix.mobileLayout || 'auto'),
+            optionLimit: {
+              enabled: !!question.matrix.optionLimit?.enabled,
+              min: Number(question.matrix.optionLimit?.min || 0),
+              max: Number(question.matrix.optionLimit?.max || 0)
+            }
+          }
+        : undefined,
+      multiFill: question.multiFill
+        ? {
+            items: Array.isArray(question.multiFill.items)
+              ? question.multiFill.items.map((item: any, itemIndex: number) => {
+                  if (item && typeof item === 'object') return String(item.label ?? item.text ?? `填空${itemIndex + 1}`)
+                  return String(item ?? `填空${itemIndex + 1}`)
+                })
+              : []
           }
         : undefined,
       hideSystemNumber: !!question.hideSystemNumber,
@@ -456,6 +535,7 @@ export function useEditorCore() {
           }
         : undefined
     }
+    return normalizeQuestionForEditor(editorQuestion)
   }
 
   function buildEditorQuestionFromQuestionBank(question: QuestionBankQuestionDTO): SurveyEditorQuestion {
@@ -510,10 +590,9 @@ export function useEditorCore() {
   }
 
   function importQuestionBankQuestion(question: QuestionBankQuestionDTO) {
-    const importedQuestion = buildEditorQuestionFromQuestionBank(question)
+    const importedQuestion = normalizeQuestionForEditor(buildEditorQuestionFromQuestionBank(question))
     surveyForm.questions.push(importedQuestion)
-    editingIndex.value = surveyForm.questions.length - 1
-    currentTab.value = 'edit'
+    openQuestionEdit(surveyForm.questions.length - 1)
     return importedQuestion
   }
 
@@ -581,7 +660,7 @@ export function useEditorCore() {
   }
 
   function getScalePreviewValues(question: SurveyEditorQuestion) {
-    const validation = ensureScaleValidation(question)
+    const validation = getScaleValidation(question)
     const values: number[] = []
     for (let value = validation.min; value <= validation.max; value += validation.step) values.push(value)
     return values
@@ -590,6 +669,8 @@ export function useEditorCore() {
   function ensureMatrixConfig(question: SurveyEditorQuestion) {
     question.matrix = question.matrix && typeof question.matrix === 'object' ? question.matrix : {}
     question.matrix.selectionType = Number(question?.type) === 21 ? 'multiple' : 'single'
+    if (!Array.isArray(question.options)) question.options = []
+    while (question.options.length < 2) question.options.push(`选项${question.options.length + 1}`)
     if (!Array.isArray(question.matrix.rows) || question.matrix.rows.length === 0) {
       question.matrix.rows = ['服务态度', '响应速度', '专业程度']
     }
@@ -597,7 +678,33 @@ export function useEditorCore() {
       if (typeof row === 'string') return row
       return String(row?.label ?? row?.text ?? `维度${index + 1}`)
     })
-    return question.matrix as { rows: string[]; selectionType: 'single' | 'multiple' }
+    if (!MATRIX_ROW_TITLE_WIDTH_OPTIONS.includes(String(question.matrix.rowTitleWidth || ''))) {
+      question.matrix.rowTitleWidth = '30%'
+    } else if (question.matrix.rowTitleWidth == null) {
+      question.matrix.rowTitleWidth = '30%'
+    }
+    question.matrix.rightRowTitle = false
+    question.matrix.rowTitleRandom = !!question.matrix.rowTitleRandom
+    question.matrix.verticalSelect = false
+    question.matrix.singleQuestionAnswer = !!question.matrix.singleQuestionAnswer
+    if (!MATRIX_MOBILE_LAYOUT_OPTIONS.some(option => option.value === question.matrix?.mobileLayout)) {
+      question.matrix.mobileLayout = 'auto'
+    }
+    normalizeMatrixOptionLimit(question)
+    return question.matrix as SurveyEditorMatrixConfig & { rows: string[]; selectionType: 'single' | 'multiple'; optionLimit: SurveyEditorMatrixOptionLimit }
+  }
+
+  function normalizeMatrixOptionLimit(question: SurveyEditorQuestion) {
+    question.matrix = question.matrix && typeof question.matrix === 'object' ? question.matrix : {}
+    const source = question.matrix.optionLimit && typeof question.matrix.optionLimit === 'object' ? question.matrix.optionLimit : {}
+    const min = Math.max(0, Math.floor(Number(source.min || 0)))
+    const max = Math.max(0, Math.floor(Number(source.max || 0)))
+    question.matrix.optionLimit = {
+      enabled: !!source.enabled,
+      min,
+      max: max > 0 && max < min ? min : max
+    }
+    return question.matrix.optionLimit as SurveyEditorMatrixOptionLimit
   }
 
   function isMatrixMultipleLegacyQuestion(type: number | string) {
@@ -613,20 +720,116 @@ export function useEditorCore() {
     matrix.rows.push(`维度${matrix.rows.length + 1}`)
   }
 
+  function insertMatrixRow(question: SurveyEditorQuestion, rowIndex: number, position: 'before' | 'after' = 'after') {
+    const matrix = ensureMatrixConfig(question)
+    const baseIndex = Math.max(0, Math.min(matrix.rows.length, rowIndex + (position === 'after' ? 1 : 0)))
+    matrix.rows.splice(baseIndex, 0, `维度${matrix.rows.length + 1}`)
+  }
+
   function removeMatrixRow(question: SurveyEditorQuestion, rowIndex: number) {
     const matrix = ensureMatrixConfig(question)
     if (rowIndex < 0 || rowIndex >= matrix.rows.length) return
+    if (matrix.rows.length <= 1) {
+      ElMessage.warning('矩阵题至少保留 1 行')
+      return
+    }
     matrix.rows.splice(rowIndex, 1)
+  }
+
+  function addMatrixColumn(question: SurveyEditorQuestion) {
+    if (!Array.isArray(question.options)) question.options = []
+    const nextIndex = question.options.length
+    question.options.push(`选项${nextIndex + 1}`)
+    const current = question as any
+    current.optionExtras = Array.isArray(current.optionExtras) ? current.optionExtras : []
+    current.optionExtras[nextIndex] = current.optionExtras[nextIndex] || createDefaultOptionExtra()
+  }
+
+  function insertMatrixColumn(question: SurveyEditorQuestion, columnIndex: number, position: 'before' | 'after' = 'after') {
+    if (!Array.isArray(question.options)) question.options = []
+    const insertAt = Math.max(0, Math.min(question.options.length, columnIndex + (position === 'after' ? 1 : 0)))
+    question.options.splice(insertAt, 0, `选项${question.options.length + 1}`)
+    const current = question as any
+    current.optionExtras = Array.isArray(current.optionExtras) ? current.optionExtras : []
+    current.optionExtras.splice(insertAt, 0, createDefaultOptionExtra())
+  }
+
+  function removeMatrixColumn(question: SurveyEditorQuestion, columnIndex: number) {
+    if (!Array.isArray(question.options)) return
+    if (columnIndex < 0 || columnIndex >= question.options.length) return
+    if (question.options.length <= 2) {
+      ElMessage.warning('矩阵题至少保留 2 列')
+      return
+    }
+    removeOption(question, columnIndex)
+  }
+
+  function swapMatrixRowsAndOptions(question: SurveyEditorQuestion) {
+    const matrix = ensureMatrixConfig(question)
+    const currentRows = matrix.rows.map((row, index) => String(row || `维度${index + 1}`)).filter(Boolean)
+    const currentOptions = Array.isArray(question.options)
+      ? question.options.map((option, index) => String(option || `选项${index + 1}`)).filter(Boolean)
+      : []
+    if (currentRows.length < 2) {
+      ElMessage.warning('行标题至少需要 2 项才能与选项交换')
+      return
+    }
+    if (currentOptions.length < 1) {
+      ElMessage.warning('请先设置矩阵选项')
+      return
+    }
+    matrix.rows = currentOptions.length > 0 ? currentOptions : ['维度1']
+    question.options = currentRows.length >= 2 ? currentRows : [...currentRows, '选项2']
+    ;(question as any).optionExtras = question.options.map(() => createDefaultOptionExtra())
+  }
+
+  function ensureMultiFillConfig(question: SurveyEditorQuestion) {
+    question.multiFill = question.multiFill && typeof question.multiFill === 'object' ? question.multiFill : {}
+    if (!Array.isArray(question.multiFill.items) || question.multiFill.items.length === 0) {
+      question.multiFill.items = ['姓名', '部门', '员工编号']
+    }
+    question.multiFill.items = question.multiFill.items
+      .map((item: any, index: number) => {
+        if (typeof item === 'string') return item
+        return String(item?.label ?? item?.text ?? `填空${index + 1}`)
+      })
+    if (question.multiFill.items.length === 0) question.multiFill.items = ['填空1']
+    return question.multiFill as { items: string[] }
+  }
+
+  function addMultiFillItem(question: SurveyEditorQuestion) {
+    const multiFill = ensureMultiFillConfig(question)
+    multiFill.items.push(`填空${multiFill.items.length + 1}`)
+  }
+
+  function addMultiFillItemAt(question: SurveyEditorQuestion, atIndex: number) {
+    const multiFill = ensureMultiFillConfig(question)
+    const label = `填空${multiFill.items.length + 1}`
+    multiFill.items.splice(atIndex, 0, label)
+  }
+
+  function removeMultiFillItem(question: SurveyEditorQuestion, itemIndex: number) {
+    const multiFill = ensureMultiFillConfig(question)
+    if (multiFill.items.length <= 1) return
+    if (itemIndex < 0 || itemIndex >= multiFill.items.length) return
+    multiFill.items.splice(itemIndex, 1)
   }
 
   function ensureUploadConfig(question: SurveyEditorQuestion) {
     const normalized = normalizeUploadQuestionConfig(question)
+    // 若 question 已有 upload 且 accept 已被显式设置（包括空字符串），则保留原值；否则用规范化结果或默认值
+    const existingAccept = question.upload && typeof question.upload === 'object' && 'accept' in question.upload ? (question.upload as any).accept : undefined
     question.upload = {
       maxFiles: normalized.maxFiles,
       maxSizeMb: normalized.maxSizeMb,
-      accept: normalized.accept || DEFAULT_UPLOAD_ACCEPT
+      accept: existingAccept !== undefined ? existingAccept : (normalized.accept || DEFAULT_UPLOAD_ACCEPT),
+      compressSize: normalized.compressSize,
+      compressDimensions: normalized.compressDimensions,
+      maxWidth: normalized.maxWidth || undefined,
+      maxHeight: normalized.maxHeight || undefined,
+      watermark: normalized.watermark || undefined
     }
-    return question.upload as { maxFiles: number; maxSizeMb: number; accept: string }
+    return question.upload as { maxFiles: number; maxSizeMb: number; accept: string; compressSize: boolean; compressDimensions: boolean; maxWidth?: number; maxHeight?: number; watermark?: string }
   }
 
   function normalizeUploadConfig(question: SurveyEditorQuestion) {
@@ -634,10 +837,68 @@ export function useEditorCore() {
     upload.maxFiles = Math.max(1, Math.min(20, Math.floor(Number(upload.maxFiles) || 1)))
     upload.maxSizeMb = Math.max(1, Math.min(10, Number(upload.maxSizeMb) || 10))
     upload.accept = sanitizeUploadAccept(upload.accept)
+    upload.maxWidth = Math.max(0, Math.min(10000, Math.floor(Number(upload.maxWidth) || 0)))
+    upload.maxHeight = Math.max(0, Math.min(10000, Math.floor(Number(upload.maxHeight) || 0)))
   }
 
   function uploadConfigSummary(question: SurveyEditorQuestion) {
     return buildUploadQuestionHelpText(question)
+  }
+
+  function getUploadRestrictionMode(question: SurveyEditorQuestion): string {
+    const accept = getUploadConfig(question).accept || ''
+    const tokens = accept.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)
+    if (!tokens.length) return 'all'
+    const imgExts = ['.jpg','.jpeg','.png','.gif','.webp']
+    const docExts = ['.pdf','.docx','.xlsx']
+    const hasOnlyImg = tokens.every(t => imgExts.includes(t))
+    if (hasOnlyImg) return 'image'
+    const hasOnlyDoc = tokens.every(t => docExts.includes(t))
+    if (hasOnlyDoc) return 'document'
+    const hasImgAndPdf = tokens.every(t => imgExts.includes(t) || t === '.pdf')
+    if (hasImgAndPdf) return 'image+pdf'
+    return 'all'
+  }
+
+  function setUploadRestrictionMode(question: SurveyEditorQuestion, mode: string) {
+    const config = ensureUploadConfig(question)
+    switch (mode) {
+      case 'all':
+        config.accept = ''
+        config.compressSize = false
+        config.compressDimensions = false
+        config.maxWidth = 0
+        config.maxHeight = 0
+        config.watermark = ''
+        break
+      case 'image':
+        config.accept = '.jpg,.jpeg,.png,.gif,.webp'
+        config.compressSize = true
+        config.compressDimensions = true
+        if (!config.maxWidth && !config.maxHeight) {
+          config.maxWidth = 1920
+          config.maxHeight = 1080
+        }
+        break
+      case 'document':
+        config.accept = '.pdf,.docx,.xlsx'
+        config.compressSize = false
+        config.compressDimensions = false
+        config.maxWidth = 0
+        config.maxHeight = 0
+        config.watermark = ''
+        break
+      case 'image+pdf':
+        config.accept = '.jpg,.jpeg,.png,.gif,.webp,.pdf'
+        config.compressSize = true
+        config.compressDimensions = true
+        if (!config.maxWidth && !config.maxHeight) {
+          config.maxWidth = 1920
+          config.maxHeight = 1080
+        }
+        break
+    }
+    normalizeUploadConfig(question)
   }
 
   function getImplementedQuestionNames() {
@@ -669,14 +930,7 @@ export function useEditorCore() {
     question.options.push(`选项${getOptionLabel(question.type, nextIndex)}`)
     const current = question as any
     current.optionExtras = Array.isArray(current.optionExtras) ? current.optionExtras : []
-    current.optionExtras[nextIndex] = current.optionExtras[nextIndex] || {
-      rich: false,
-      hasDesc: false,
-      desc: '',
-      exclusive: false,
-      defaultSelected: false,
-      hidden: false
-    }
+    current.optionExtras[nextIndex] = current.optionExtras[nextIndex] || createDefaultOptionExtra()
   }
 
   function removeOption(question: SurveyEditorQuestion, optionIndex: number) {
@@ -690,19 +944,95 @@ export function useEditorCore() {
   function ensureOptionExtras(question: SurveyEditorQuestion, optionIndex: number) {
     const current = question as any
     current.optionExtras = Array.isArray(current.optionExtras) ? current.optionExtras : []
-    current.optionExtras[optionIndex] = current.optionExtras[optionIndex] || {
-      quotaLimit: 0,
-      rich: false,
-      hasDesc: false,
-      desc: '',
-      exclusive: false,
-      defaultSelected: false,
-      hidden: false,
-      fillEnabled: false,
-      fillRequired: false,
-      fillPlaceholder: ''
-    }
+    current.optionExtras[optionIndex] = current.optionExtras[optionIndex] || createDefaultOptionExtra()
     return current.optionExtras[optionIndex]
+  }
+
+  function getSliderValidation(question: SurveyEditorQuestion) {
+    if (question.validation && typeof question.validation === 'object') {
+      return question.validation as { min: number; max: number; step: number }
+    }
+    return { min: 0, max: 100, step: 1 }
+  }
+
+  function getRatingValidation(question: SurveyEditorQuestion) {
+    if (question.validation && typeof question.validation === 'object') {
+      return question.validation as { min: number; max: number; step: number }
+    }
+    return { min: 1, max: 5, step: 1 }
+  }
+
+  function getScaleValidation(question: SurveyEditorQuestion) {
+    if (question.validation && typeof question.validation === 'object') {
+      return question.validation as { min: number; max: number; step: number; minLabel?: string; maxLabel?: string }
+    }
+    return { min: 0, max: 10, step: 1, minLabel: '最低', maxLabel: '最高' }
+  }
+
+  function getMatrixConfig(question: SurveyEditorQuestion) {
+    if (question.matrix && typeof question.matrix === 'object') {
+      return question.matrix as SurveyEditorMatrixConfig & { rows: string[]; selectionType: 'single' | 'multiple'; optionLimit: SurveyEditorMatrixOptionLimit }
+    }
+    return {
+      rows: [],
+      selectionType: 'single',
+      rowTitleWidth: '30%',
+      rightRowTitle: false,
+      rowTitleRandom: false,
+      verticalSelect: false,
+      singleQuestionAnswer: false,
+      mobileLayout: 'auto',
+      optionLimit: { enabled: false, min: 0, max: 0 }
+    } as SurveyEditorMatrixConfig & { rows: string[]; selectionType: 'single' | 'multiple'; optionLimit: SurveyEditorMatrixOptionLimit }
+  }
+
+  function getMultiFillConfig(question: SurveyEditorQuestion) {
+    if (question.multiFill && typeof question.multiFill === 'object') {
+      return question.multiFill as { items: string[] }
+    }
+    return { items: [] }
+  }
+
+  function getUploadConfig(question: SurveyEditorQuestion) {
+    if (question.upload && typeof question.upload === 'object') {
+      return question.upload as { maxFiles: number; maxSizeMb: number; accept: string; compressSize: boolean; compressDimensions: boolean; maxWidth?: number; maxHeight?: number; watermark?: string }
+    }
+    return {
+      maxFiles: 1,
+      maxSizeMb: 10,
+      accept: DEFAULT_UPLOAD_ACCEPT,
+      compressSize: false,
+      compressDimensions: false,
+      maxWidth: 0,
+      maxHeight: 0,
+      watermark: ''
+    }
+  }
+
+  function getOptionExtra(question: SurveyEditorQuestion, optionIndex: number) {
+    const current = question as any
+    const extra = Array.isArray(current.optionExtras) ? current.optionExtras[optionIndex] : undefined
+    return extra || createDefaultOptionExtra()
+  }
+
+  function normalizeQuestionForEditor(question: SurveyEditorQuestion) {
+    if (!question) return question
+
+    if (hasOptions(question.type) && !Array.isArray(question.options)) question.options = []
+    if (isMatrixLegacyQuestion(question.type)) ensureMatrixConfig(question)
+    if (isMultiFillLegacyQuestion(question.type)) ensureMultiFillConfig(question)
+    if (isSliderLegacyQuestion(question.type)) ensureSliderValidation(question)
+    if (isUploadLegacyQuestion(question.type)) ensureUploadConfig(question)
+    if (isRatingLegacyQuestion(question.type)) ensureRatingValidation(question)
+    if (isScaleLegacyQuestion(question.type)) ensureScaleValidation(question)
+
+    if (Array.isArray(question.options)) {
+      question.optionExtras = Array.isArray(question.optionExtras) ? question.optionExtras : []
+      while (question.optionExtras.length > question.options.length) question.optionExtras.pop()
+      question.options.forEach((_, optionIndex) => ensureOptionExtras(question, optionIndex))
+    }
+
+    return question
   }
 
   function isGroupConfigured(question: SurveyEditorQuestion): boolean {
@@ -751,7 +1081,7 @@ export function useEditorCore() {
     if (Array.isArray(question.tags) && question.tags.length > 0) importedQuestion.tags = mergeUniqueTextList(question.tags)
     if (question.aiMeta && isPlainObject(question.aiMeta)) importedQuestion.aiMeta = mergeAiMeta(question.aiMeta)
 
-    return importedQuestion
+    return normalizeQuestionForEditor(importedQuestion)
   }
 
   function resolveAiImportedSurveyState(payload: AiImportedSurveyPayload) {
@@ -777,12 +1107,14 @@ export function useEditorCore() {
 
   function applyAiImportedSurvey(payload: AiImportedSurveyPayload) {
     const { importedQuestions, title, description, questions } = resolveAiImportedSurveyState(payload)
+    questions.forEach(question => normalizeQuestionForEditor(question))
 
     if (aiApplyMode.value === 'replace') {
       surveyForm.title = title
       surveyForm.description = description
       surveyForm.questions.splice(0, surveyForm.questions.length, ...questions)
-      editingIndex.value = importedQuestions.length > 0 ? 0 : -1
+      if (importedQuestions.length > 0) openQuestionEdit(0)
+      else editingIndex.value = -1
     } else {
       surveyForm.title = title
       surveyForm.description = description
@@ -921,16 +1253,31 @@ export function useEditorCore() {
       id: generateQuestionId(),
       title: `${originalQuestion.title}（副本）`,
       options: Array.isArray(originalQuestion.options) ? [...originalQuestion.options] : undefined,
+      optionExtras: Array.isArray(originalQuestion.optionExtras)
+        ? originalQuestion.optionExtras.map(extra => ({ ...createDefaultOptionExtra(), ...(extra || {}) }))
+        : undefined,
       validation: originalQuestion.validation ? { ...originalQuestion.validation } : undefined,
       upload: originalQuestion.upload ? { ...originalQuestion.upload } : undefined,
+      multiFill: originalQuestion.multiFill
+        ? {
+            items: Array.isArray(originalQuestion.multiFill.items) ? [...originalQuestion.multiFill.items] : undefined
+          }
+        : undefined,
       matrix: originalQuestion.matrix
         ? {
             rows: Array.isArray(originalQuestion.matrix.rows) ? [...originalQuestion.matrix.rows] : undefined,
-            selectionType: originalQuestion.matrix.selectionType
+            selectionType: originalQuestion.matrix.selectionType,
+            rowTitleWidth: originalQuestion.matrix.rowTitleWidth,
+            rightRowTitle: originalQuestion.matrix.rightRowTitle,
+            rowTitleRandom: originalQuestion.matrix.rowTitleRandom,
+            verticalSelect: originalQuestion.matrix.verticalSelect,
+            singleQuestionAnswer: originalQuestion.matrix.singleQuestionAnswer,
+            mobileLayout: originalQuestion.matrix.mobileLayout,
+            optionLimit: originalQuestion.matrix.optionLimit ? { ...originalQuestion.matrix.optionLimit } : undefined
           }
         : undefined
     }
-    surveyForm.questions.splice(index + 1, 0, duplicatedQuestion)
+    surveyForm.questions.splice(index + 1, 0, normalizeQuestionForEditor(duplicatedQuestion))
   }
 
   function deleteQuestion(index: number) {
@@ -949,13 +1296,21 @@ export function useEditorCore() {
     if (isRatingLegacyQuestion(current.type)) nextQuestion.validation = { ...ensureRatingValidation(current) }
     if (isScaleLegacyQuestion(current.type)) nextQuestion.validation = { ...ensureScaleValidation(current) }
     if (isMatrixLegacyQuestion(current.type)) {
+      const currentMatrix = ensureMatrixConfig(current)
       nextQuestion.matrix = {
-        rows: [...ensureMatrixConfig(current).rows],
-        selectionType: ensureMatrixConfig(current).selectionType
+        rows: [...currentMatrix.rows],
+        selectionType: currentMatrix.selectionType,
+        rowTitleWidth: currentMatrix.rowTitleWidth,
+        rightRowTitle: currentMatrix.rightRowTitle,
+        rowTitleRandom: currentMatrix.rowTitleRandom,
+        verticalSelect: currentMatrix.verticalSelect,
+        singleQuestionAnswer: currentMatrix.singleQuestionAnswer,
+        mobileLayout: currentMatrix.mobileLayout,
+        optionLimit: { ...currentMatrix.optionLimit }
       }
     }
     if (isUploadLegacyQuestion(current.type)) nextQuestion.upload = { ...ensureUploadConfig(current) }
-    surveyForm.questions.splice(index + 1, 0, nextQuestion)
+    surveyForm.questions.splice(index + 1, 0, normalizeQuestionForEditor(nextQuestion))
   }
 
   function addOptionAt(question: SurveyEditorQuestion, at: number) {
@@ -963,14 +1318,7 @@ export function useEditorCore() {
     question.options.splice(at, 0, `选项${question.options.length + 1}`)
     const current = question as any
     current.optionExtras = Array.isArray(current.optionExtras) ? current.optionExtras : []
-    current.optionExtras.splice(at, 0, {
-      rich: false,
-      hasDesc: false,
-      desc: '',
-      exclusive: false,
-      defaultSelected: false,
-      hidden: false
-    })
+    current.optionExtras.splice(at, 0, createDefaultOptionExtra())
   }
 
   function toggleDesc(question: SurveyEditorQuestion, optionIndex: number) {
@@ -1127,11 +1475,38 @@ export function useEditorCore() {
       const matrix = ensureMatrixConfig(question)
       base.matrix = {
         selectionType: matrix.selectionType,
+        rowTitleWidth: matrix.rowTitleWidth || '30%',
+        rightRowTitle: !!matrix.rightRowTitle,
+        rowTitleRandom: !!matrix.rowTitleRandom,
+        verticalSelect: !!matrix.verticalSelect,
+        singleQuestionAnswer: !!matrix.singleQuestionAnswer,
+        mobileLayout: matrix.mobileLayout || 'auto',
+        optionLimit: {
+          enabled: !!matrix.optionLimit?.enabled,
+          min: Number(matrix.optionLimit?.min || 0),
+          max: Number(matrix.optionLimit?.max || 0)
+        },
         rows: matrix.rows.map((label: string, rowIndex: number) => ({
           label,
           value: String(rowIndex + 1),
           order: rowIndex + 1
         }))
+      }
+    }
+
+    if (base.type === 'multi_input') {
+      const multiFill = ensureMultiFillConfig(question)
+      base.multiFill = {
+        items: multiFill.items.map((label: string, itemIndex: number) => {
+          const normalizedLabel = String(label || '').trim() || `填空${itemIndex + 1}`
+          return {
+            label: normalizedLabel,
+            value: String(itemIndex + 1),
+            order: itemIndex + 1,
+            placeholder: '',
+            required: true
+          }
+        })
       }
     }
 
@@ -1308,7 +1683,7 @@ export function useEditorCore() {
       }
       surveyForm.endTime = survey?.settings?.endTime || ''
       currentSurveyId.value = String(survey.id || editingId)
-      shareId.value = String((survey as any).shareId || survey.id || '')
+      shareId.value = String((survey as any).share_code || (survey as any).shareId || survey.id || '')
 
       try {
         const statsData = await getSurveyDetailStats(currentSurveyId.value)
@@ -1386,6 +1761,7 @@ export function useEditorCore() {
           localQuestion.optionLogic[optionIndex] = mapped
         })
       })
+      surveyForm.questions.forEach(question => normalizeQuestionForEditor(question))
     } catch (error) {
       console.error('加载问卷失败', error)
     }
@@ -1423,11 +1799,13 @@ export function useEditorCore() {
     copyShareLink,
     validateForm,
     closeQuestionEdit,
+    openQuestionEdit,
     getQuestionTypeLabel,
     goBack,
     getQuestionConfig,
     isStandaloneConfigType,
     isMatrixLegacyQuestion,
+    isMultiFillLegacyQuestion,
     isSliderLegacyQuestion,
     isUploadLegacyQuestion,
     isRatingLegacyQuestion,
@@ -1436,25 +1814,47 @@ export function useEditorCore() {
     createDefaultQuestion,
     importQuestionBankQuestion,
     ensureSliderValidation,
+    getSliderValidation,
     normalizeSliderValidation,
     ensureRatingValidation,
+    getRatingValidation,
     normalizeRatingValidation,
     ensureScaleValidation,
+    getScaleValidation,
     normalizeScaleValidation,
     getScalePreviewValues,
     ensureMatrixConfig,
+    getMatrixConfig,
+    normalizeMatrixOptionLimit,
     isMatrixMultipleLegacyQuestion,
     isMatrixDropdownLegacyQuestion,
     addMatrixRow,
+    insertMatrixRow,
     removeMatrixRow,
+    addMatrixColumn,
+    insertMatrixColumn,
+    removeMatrixColumn,
+    swapMatrixRowsAndOptions,
+    matrixRowTitleWidthOptions: MATRIX_ROW_TITLE_WIDTH_OPTIONS,
+    matrixMobileLayoutOptions: MATRIX_MOBILE_LAYOUT_OPTIONS,
+    ensureMultiFillConfig,
+    getMultiFillConfig,
+    addMultiFillItem,
+    addMultiFillItemAt,
+    removeMultiFillItem,
     ensureUploadConfig,
+    getUploadConfig,
     normalizeUploadConfig,
     uploadConfigSummary,
+    getUploadRestrictionMode,
+    setUploadRestrictionMode,
     addQuestionByType,
     hasOptions,
     addOption,
     removeOption,
     ensureOptionExtras,
+    getOptionExtra,
+    normalizeQuestionForEditor,
     isGroupConfigured,
     isScoreConfigured,
     moveQuestionUp,

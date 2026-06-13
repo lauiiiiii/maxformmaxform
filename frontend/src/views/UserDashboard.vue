@@ -1090,6 +1090,7 @@ const fetchSurveys = async () => {
     surveys.value = list.map((s: any) => ({
       ...s,
       id: s.id || s._id,
+      shareId: s.shareId || s.share_code || s.id || s._id,
       displayStatus: s.status,
       // 兼容多种后端：优先完整版的 responseCount；其次旧字段 answerCount；最后演示版 simple-server 的 submitCount
       answerCount: (s as any).responseCount ?? (s as any).answerCount ?? (s as any).submitCount ?? 0
@@ -1217,9 +1218,8 @@ const onDesignMenu = (cmd: { type: 'edit'|'settings'|'appearance', id: string|nu
 }
 const onAnalyze = (survey:any) => router.push({ name: 'SurveyResults', params: { id: survey.id } })
 const onSend = async (survey:any) => {
-  const shareId = survey.shareId || survey.id
-  // 直接使用9位数字ID作为URL后缀，不再使用8字符编码
-  const link = `${location.origin}/s/${shareId}`
+  const shareId = survey.share_code || survey.shareId || survey.id
+  const link = `${location.origin}/s/${encodeURIComponent(String(shareId))}`
   try {
     await navigator.clipboard.writeText(link)
     ElMessage.success('已复制问卷链接到剪贴板')

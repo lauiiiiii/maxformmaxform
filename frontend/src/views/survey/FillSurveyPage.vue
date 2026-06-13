@@ -34,7 +34,7 @@
           <div class="desc" v-if="survey.description" v-html="safeHtml(survey.description)"></div>
           <div v-if="survey.settings?.showProgress" class="progress-panel">
             <div class="progress-copy">进度 {{ answeredVisibleQuestions }}/{{ totalVisibleQuestions }}</div>
-            <el-progress :percentage="progressPercent" :show-text="false" :stroke-width="8" />
+            <el-progress :percentage="progressPercent" :show-text="false" :stroke-width="4" />
           </div>
         </div>
       <el-divider />
@@ -42,10 +42,11 @@
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="q-form">
         <template v-for="(q, idx) in survey.questions" :key="'q-'+idx">
           <template v-if="visibleMap[String(idx+1)] !== false">
-          <el-form-item :prop="String(q.id ?? (idx+1))" :required="!!q.required" class="q-item" :data-testid="`fill-question-${idx}`">
+          <el-form-item :prop="String(q.id ?? (idx+1))" class="q-item" :data-testid="`fill-question-${idx}`">
             <template #label>
               <div class="q-label" :data-testid="`fill-question-title-${idx}`">
-                <span v-if="!q.hideSystemNumber" class="q-number">{{ idx + 1 }}</span>
+                <span v-if="q.required && !q.hideSystemNumber" class="q-required">*</span>
+                <span v-if="!q.hideSystemNumber" class="q-number">{{ idx + 1 }}.</span>
                 <span class="q-title">
                   <template v-if="(q as any).titleHtml">
                     <span v-html="safeHtml((q as any).titleHtml)"></span>
@@ -54,6 +55,7 @@
                     {{ q.title }}
                   </template>
                 </span>
+                <span v-if="!q.required" class="q-optional-tag">【选填】</span>
               </div>
             </template>
             <div class="q-desc" v-if="q.description" v-html="safeHtml(q.description)"></div>
@@ -198,25 +200,33 @@
             <!-- 文件上传题 -->
             <template v-else-if="q.type === 'upload'">
               <div class="upload-answer">
-                <label class="upload-picker" :class="{ disabled: uploadState[String(q.id ?? (idx+1))] || preview || isUploadLimitReached(q, idx) }">
+                <div v-if="getUploadAnswerList(q, idx).length" :data-testid="`fill-upload-list-${idx}`" class="upload-list">
+                  <div v-for="(file, fileIndex) in getUploadAnswerList(q, idx)" :key="'up-'+file.id+'-'+fileIndex" class="upload-item">
+                    <span class="upload-item__icon">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    </span>
+                    <span class="upload-link">{{ getUploadDisplayName(file) }}</span>
+                    <button v-if="!preview" type="button" class="upload-remove" @click="removeUploadedFile(q, idx, fileIndex)" title="移除">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <label v-if="!isUploadLimitReached(q, idx) && !preview" class="upload-picker" :class="{ disabled: !!uploadState[String(q.id ?? (idx+1))] }">
                   <input
                     type="file"
                     :data-testid="`fill-upload-input-${idx}`"
                     :multiple="getUploadConfig(q).maxFiles > 1"
                     :accept="getUploadConfig(q).accept"
-                    :disabled="uploadState[String(q.id ?? (idx+1))] || preview || isUploadLimitReached(q, idx)"
+                    :disabled="!!uploadState[String(q.id ?? (idx+1))]"
                     @change="onUploadFilesSelected(q, idx, $event)"
                   />
-                  <span>{{ uploadState[String(q.id ?? (idx+1))] ? '上传中...' : getUploadButtonText(q, idx) }}</span>
+                  <span class="upload-picker__icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  </span>
+                  <span>{{ getUploadAnswerList(q, idx).length ? '继续添加' : '选择文件' }}</span>
                 </label>
-                <div class="upload-tip">{{ getUploadHelpText(q) }}</div>
+                <div v-if="!getUploadAnswerList(q, idx).length" class="upload-tip">{{ getUploadHelpText(q) }}</div>
                 <div v-if="uploadErrors[String(q.id ?? (idx+1))]" :data-testid="`fill-upload-error-${idx}`" class="upload-error">{{ uploadErrors[String(q.id ?? (idx+1))] }}</div>
-                <div v-if="getUploadAnswerList(q, idx).length" :data-testid="`fill-upload-list-${idx}`" class="upload-list">
-                  <div v-for="(file, fileIndex) in getUploadAnswerList(q, idx)" :key="'up-'+file.id+'-'+fileIndex" class="upload-item">
-                    <a class="upload-link" :href="file.url" target="_blank" rel="noopener noreferrer">{{ file.name }}</a>
-                    <button v-if="!preview" type="button" class="upload-remove" @click="removeUploadedFile(q, idx, fileIndex)">移除</button>
-                  </div>
-                </div>
               </div>
             </template>
             <!-- 日期题 -->
@@ -249,9 +259,9 @@
                 <el-rate
                   :model-value="Number(form[q.id ?? (idx+1)] || 0)"
                   :max="getRatingMax(q)"
+                  :size="'large'"
                   @update:modelValue="onRatingChange(q, idx, $event)"
                 />
-                <div class="rating-answer-meta">评分范围：{{ getRatingMin(q) }} - {{ getRatingMax(q) }} 星</div>
               </div>
             </template>
             <template v-else-if="q.type === 'scale'">
@@ -297,7 +307,7 @@
                     </el-select>
                   </div>
                 </template>
-                <div v-else class="matrix-answer-table">
+                <div v-else class="matrix-answer-table" :style="matrixAnswerTableStyle(q, idx)">
                   <div class="matrix-answer-row matrix-answer-row--head">
                     <span class="matrix-answer-cell matrix-answer-cell--row">维度</span>
                     <span
@@ -344,7 +354,6 @@
               <el-input v-model="form[q.id ?? (idx+1)]" placeholder="请输入" />
             </template>
           </el-form-item>
-          <el-divider class="q-divider" />
           </template>
         </template>
       </el-form>
@@ -515,6 +524,36 @@ function getMatrixColumns(q: any, idx: number) {
   return (filteredOptions(q, idx) || []).filter((item: any) => item.value != null)
 }
 
+const MATRIX_ANSWER_ROW_WIDTH = 120
+const MATRIX_ANSWER_OPTION_MAX_WIDTH = 96
+const MATRIX_ANSWER_OPTION_MIN_WIDTH = 52
+const MATRIX_ANSWER_OPTION_WIDTH_BASIS = 520
+
+function getMatrixAnswerOptionCount(q: any, idx: number) {
+  return Math.max(1, getMatrixColumns(q, idx).length)
+}
+
+function getMatrixAnswerOptionWidth(q: any, idx: number) {
+  const optionCount = getMatrixAnswerOptionCount(q, idx)
+  return Math.max(
+    MATRIX_ANSWER_OPTION_MIN_WIDTH,
+    Math.min(MATRIX_ANSWER_OPTION_MAX_WIDTH, Math.floor(MATRIX_ANSWER_OPTION_WIDTH_BASIS / optionCount))
+  )
+}
+
+function getMatrixAnswerMinWidth(q: any, idx: number) {
+  return MATRIX_ANSWER_ROW_WIDTH + getMatrixAnswerOptionCount(q, idx) * getMatrixAnswerOptionWidth(q, idx)
+}
+
+function matrixAnswerTableStyle(q: any, idx: number) {
+  return {
+    minWidth: `${getMatrixAnswerMinWidth(q, idx)}px`,
+    '--matrix-answer-row-width': `${MATRIX_ANSWER_ROW_WIDTH}px`,
+    '--matrix-answer-option-count': String(getMatrixAnswerOptionCount(q, idx)),
+    '--matrix-answer-option-width': `${getMatrixAnswerOptionWidth(q, idx)}px`
+  } as Record<string, string>
+}
+
 function getMatrixSelectionType(q: any): 'single' | 'multiple' {
   return q?.matrix?.selectionType === 'multiple' ? 'multiple' : 'single'
 }
@@ -672,6 +711,23 @@ function getUploadAnswerList(q: any, idx: number): UploadedSurveyFile[] {
   return Array.isArray(form.value[key]) ? form.value[key] : []
 }
 
+function decodeUploadFileName(name: unknown) {
+  const raw = String(name || '')
+  if (!raw || !/[\u0080-\u00ff]/.test(raw)) return raw
+
+  try {
+    const bytes = Uint8Array.from(Array.from(raw), char => char.charCodeAt(0) & 0xff)
+    const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    return decoded || raw
+  } catch {
+    return raw
+  }
+}
+
+function getUploadDisplayName(file: UploadedSurveyFile) {
+  return decodeUploadFileName(file?.name) || '未命名文件'
+}
+
 function getUploadConfig(q: any) {
   return normalizeUploadQuestionConfig(q)
 }
@@ -750,12 +806,12 @@ function syncRankingAnswer(q: any, idx: number) {
   form.value[key] = next
 }
 
-function getRankingItems(q: any, idx: number) {
+function getRankingItems(q: any, idx: number): any[] {
   const key = String(q.id ?? (idx + 1))
   const visible = (filteredOptions(q, idx) || []).filter((opt: any) => opt?.value != null)
   const order = Array.isArray(form.value[key]) ? form.value[key].map(String) : []
   const byValue = new Map(visible.map((opt: any) => [String(opt.value), opt]))
-  const ordered = order.map((value: string) => byValue.get(value)).filter(Boolean)
+  const ordered: any[] = order.map((value: string) => byValue.get(value)).filter(Boolean)
   visible.forEach((opt: any) => {
     if (!order.includes(String(opt.value))) ordered.push(opt)
   })
@@ -1386,13 +1442,16 @@ function safeHtml(raw:string){
 }
 .paper-title { margin: 20px 8px 30px; font-size: 24px; font-weight: 700; text-align:center; color: var(--el-color-primary, #409eff); }
 .desc { color: #6b7280; margin: 2px 8px 8px; }
-.progress-panel { margin: 12px 8px 0; padding: 12px 14px; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 10px; }
-.progress-copy { margin-bottom: 8px; color: #475569; font-size: 13px; font-weight: 600; }
+.progress-panel { margin: 0 0 10px; padding: 0 4px; }
+.progress-copy { margin-bottom: 4px; color: #94a3b8; font-size: 12px; font-weight: 400; }
 .q-form { padding: 0 20px; }
 .q-item { margin-bottom: 30px; }
 .q-item :deep(.el-form-item__label) { font-weight: 600; color:#333333; font-size: 15px; margin-bottom: 15px; }
+.q-item.asterisk-left :deep(.el-form-item__label)::before { content: none !important; }
 .q-label{ display:inline-flex; align-items:flex-start; gap:8px; line-height:1.5; }
+.q-required{ color:#ef4444; font-weight:600; margin-right:1px; }
 .q-number{ font-weight:600; color:#1f2937; min-width:22px; text-align:right; }
+.q-optional-tag{ color:#9ca3af; font-size:12px; font-weight:400; margin-left:4px; white-space:nowrap; }
 .q-title{ font-weight:600; color:#1f2937; }
 .group-header{
   display:block;
@@ -1454,7 +1513,6 @@ function safeHtml(raw:string){
 .opt-vertical :deep(.el-checkbox__label) {
   padding-left: 0 !important;
 }
-.q-divider { margin: 8px 0 6px; }
 .actions { display:flex; flex-direction: column; align-items:center; gap:12px; margin: 16px 8px 10px; }
 .submit-btn { min-width: 120px; }
 .msg { padding: 0; width: 100%; max-width: 560px; }
@@ -1527,7 +1585,7 @@ function safeHtml(raw:string){
 .stage-explain-block {
   padding: 14px 16px;
   border-radius: 12px;
-  background: #f8fafc;
+  background: #fff;
   border: 1px solid #e2e8f0;
   color: #334155;
 }
@@ -1567,13 +1625,32 @@ function safeHtml(raw:string){
 
 .rating-answer {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+}
+
+.rating-answer :deep(.el-rate) {
+  height: auto;
+}
+
+.rating-answer :deep(.el-rate .el-rate__item) {
+  margin-right: 6px;
+}
+
+.rating-answer :deep(.el-rate .el-rate__icon) {
+  font-size: 32px;
+  transition: transform 0.15s;
+}
+
+.rating-answer :deep(.el-rate .el-rate__icon:hover) {
+  transform: scale(1.15);
 }
 
 .rating-answer-meta {
-  color: #64748b;
-  font-size: 12px;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .scale-answer {
@@ -1622,7 +1699,9 @@ function safeHtml(raw:string){
 
 .matrix-answer-row {
   display: grid;
-  grid-template-columns: minmax(120px, 1.2fr) repeat(auto-fit, minmax(72px, 1fr));
+  grid-template-columns:
+    var(--matrix-answer-row-width, 120px)
+    repeat(var(--matrix-answer-option-count, 1), var(--matrix-answer-option-width, 72px));
   align-items: center;
 }
 
@@ -1633,22 +1712,131 @@ function safeHtml(raw:string){
 
 .matrix-answer-cell {
   padding: 12px 10px;
-  border-bottom: 1px solid #e5e7eb;
-  border-right: 1px solid #e5e7eb;
   text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.matrix-answer-cell--row {
-  text-align: left;
-  color: #1f2937;
+.matrix-answer-row--head .matrix-answer-cell {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.matrix-answer-row:not(.matrix-answer-row--head) .matrix-answer-cell {
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .matrix-answer-row:last-child .matrix-answer-cell {
   border-bottom: none;
 }
 
-.matrix-answer-cell:last-child {
-  border-right: none;
+.matrix-answer-cell--row {
+  border-right: 1px solid #e5e7eb;
+  text-align: left;
+  color: #1f2937;
+}
+
+/* ===== 手机端全局（<=640px）：去除卡片外壳，全宽铺开 ===== */
+@media (max-width: 640px) {
+  .page {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .paper {
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 16px 14px 28px;
+  }
+
+  .progress-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    padding: 0;
+    background: transparent;
+  }
+
+  .progress-copy {
+    display: none;
+  }
+
+  /* 矩阵题手机端 */
+  .matrix-answer:not(.matrix-answer--dropdown) {
+    overflow-x: visible;
+  }
+
+  .matrix-answer-table {
+    width: 100%;
+    min-width: 0 !important;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  /* 手机端：表头只显示选项，行标题单独显示在每行上方 */
+  .matrix-answer-row--head {
+    display: flex !important;
+    background: #f8fafc;
+    border-bottom: none;
+  }
+
+  .matrix-answer-row--head .matrix-answer-cell--row {
+    display: none !important;
+  }
+
+  .matrix-answer-row--head .matrix-answer-cell {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 3px;
+    font-size: 12px;
+    line-height: 1.2;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    word-break: break-all;
+  }
+
+  .matrix-answer-row:not(.matrix-answer-row--head) {
+    display: flex !important;
+    flex-wrap: wrap;
+    border-bottom: none;
+  }
+
+  .matrix-answer-row:not(.matrix-answer-row--head):last-child {
+    border-bottom: none;
+  }
+
+  .matrix-answer-row:not(.matrix-answer-row--head) .matrix-answer-cell--row {
+    width: 100%;
+    padding: 10px 14px 4px;
+    border: none;
+    text-align: left;
+    font-weight: 500;
+    font-size: 13px;
+    color: #0f172a;
+    background: #fff;
+  }
+
+  .matrix-answer-row:not(.matrix-answer-row--head) .matrix-answer-cell:not(.matrix-answer-cell--row) {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 2px 12px;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+.matrix-answer-cell :deep(.el-radio__label),
+.matrix-answer-cell :deep(.el-checkbox__label) {
+  display: none;
 }
 
 .ratio-answer {
@@ -1809,31 +1997,41 @@ function safeHtml(raw:string){
 }
 
 .upload-answer {
-  width: min(520px, 100%);
+  width: 100%;
+  max-width: 680px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .upload-picker {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   width: fit-content;
-  min-width: 132px;
-  padding: 10px 16px;
-  border: 1px dashed #94a3b8;
-  border-radius: 10px;
-  background: #f8fafc;
-  color: #334155;
+  min-width: 148px;
+  padding: 12px 18px;
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #fff;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
   position: relative;
-  overflow: hidden;
+  transition: all 0.2s;
+}
+
+.upload-picker:hover:not(.disabled) {
+  border-color: #3b82f6;
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 
 .upload-picker.disabled {
   cursor: not-allowed;
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 .upload-picker input {
@@ -1843,46 +2041,96 @@ function safeHtml(raw:string){
   cursor: pointer;
 }
 
+.upload-picker__icon {
+  display: flex;
+  align-items: center;
+  color: inherit;
+}
+
 .upload-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.upload-tip {
-  color: #64748b;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
 .upload-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   padding: 10px 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  background: #fff;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.upload-item__icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .upload-link {
+  flex: 1;
+  min-width: 0;
   color: #2563eb;
+  font-size: 13px;
   text-decoration: none;
-  word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-link:hover {
+  text-decoration: underline;
 }
 
 .upload-remove {
-  border: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
   background: transparent;
-  color: #dc2626;
+  color: #94a3b8;
   cursor: pointer;
-  flex: 0 0 auto;
+  transition: all 0.15s;
+}
+
+.upload-remove:hover {
+  background: #fee2e2;
+  color: #ef4444;
 }
 
 .upload-error {
   color: #dc2626;
   font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .upload-picker {
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    padding: 14px 20px;
+    border-radius: 14px;
+  }
+
+  .upload-list {
+    gap: 6px;
+  }
+
+  .upload-item {
+    padding: 12px 14px;
+    border-radius: 10px;
+  }
+
+  .upload-item__icon {
+    width: 32px;
+    height: 32px;
+  }
 }
 
 

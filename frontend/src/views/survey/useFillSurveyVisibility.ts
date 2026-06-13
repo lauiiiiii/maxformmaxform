@@ -44,7 +44,9 @@ export function useFillSurveyVisibility({
       const answered = Array.isArray(value)
         ? value.length > 0
         : (value && typeof value === 'object'
-          ? Object.keys(value).length > 0
+          ? (question.type === 'multi_input'
+            ? Object.values(value).some((item) => String(item ?? '').trim() !== '')
+            : Object.keys(value).length > 0)
           : value !== undefined && value !== null && String(value).trim() !== '')
 
       return count + (answered ? 1 : 0)

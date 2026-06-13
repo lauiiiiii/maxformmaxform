@@ -1,30 +1,16 @@
-import knex from '../db/knex.js'
+import { parseJsonField } from '../utils/jsonField.js'
+import getDb from '../db/getDb.js'
 
 const TABLE = 'question_bank_questions'
 
-function getDb(options = {}) {
-  return options.db || knex
-}
-
-function parseJsonField(value, fallback = null) {
-  if (value == null) return fallback
-  if (typeof value === 'string') {
-    try {
-      return JSON.parse(value)
-    } catch {
-      return fallback
-    }
-  }
-  return value
-}
-
 function toDto(row) {
   if (!row) return null
+  parseJsonField(row, 'content')
   return {
     ...row,
     repoId: row.repo_id,
     score: row.score == null ? null : Number(row.score),
-    content: parseJsonField(row.content, null),
+    content: row.content,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }

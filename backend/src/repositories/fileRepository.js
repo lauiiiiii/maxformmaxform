@@ -13,6 +13,10 @@ const fileRepository = {
     return FileModel.countPendingBySurveyQuestionSession(surveyId, questionOrder, submissionToken, options)
   },
 
+  async listPendingBySurveyQuestionSession(surveyId, questionOrder, submissionToken, options = {}) {
+    return FileModel.listPendingBySurveyQuestionSession(surveyId, questionOrder, submissionToken, options)
+  },
+
   async create(payload, options = {}) {
     return FileModel.create(payload, options)
   },

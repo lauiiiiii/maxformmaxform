@@ -4,7 +4,7 @@ import { loginApi, registerApi, meApi } from '../api/auth'
 import type { User, Role } from '../types/user'
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref(localStorage.getItem('token') || '')
+  const token = ref('')
   const user = ref<User | null>(null)
   const role = ref<Role | null>(null)
 
@@ -19,7 +19,6 @@ export const useAuthStore = defineStore('auth', () => {
   function setAuth(t: string, u: User) {
     token.value = t
     user.value = u
-    localStorage.setItem('token', t)
   }
 
   function clearAuth() {

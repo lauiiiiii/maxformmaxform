@@ -1,10 +1,7 @@
 import knex from '../db/knex.js'
+import getDb from '../db/getDb.js'
 
 const TABLE = 'messages'
-
-function getDb(options = {}) {
-  return options.db || knex
-}
 
 function toDto(row) {
   if (!row) return null
@@ -46,8 +43,9 @@ const Message = {
     return toDto(row)
   },
 
-  async list({ recipient_id, unread, types, page = 1, pageSize = 50 }) {
-    let q = knex(TABLE).where('recipient_id', recipient_id)
+  async list({ recipient_id, unread, types, page = 1, pageSize = 50 }, options = {}) {
+    const db = getDb(options)
+    let q = db(TABLE).where('recipient_id', recipient_id)
     if (unread !== undefined) q = q.andWhere('is_read', unread)
     if (Array.isArray(types) && types.length) q = q.whereIn('type', types)
 
@@ -63,11 +61,12 @@ const Message = {
     }
   },
 
-  async markRead(id, recipient_id) {
-    await knex(TABLE)
+  async markRead(id, recipient_id, options = {}) {
+    const db = getDb(options)
+    await db(TABLE)
       .where({ id, recipient_id })
-      .update({ is_read: true, read_at: knex.fn.now() })
-    return Message.findById(id, recipient_id)
+      .update({ is_read: true, read_at: db.fn.now() })
+    return Message.findById(id, recipient_id, options)
   }
 }
 

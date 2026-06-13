@@ -10,6 +10,11 @@ export interface NormalizedUploadQuestionConfig {
   maxFiles: number
   maxSizeMb: number
   accept: string
+  compressSize: boolean
+  compressDimensions: boolean
+  maxWidth: number
+  maxHeight: number
+  watermark: string
 }
 
 function toPositiveInt(value: unknown, fallback: number, max = Number.POSITIVE_INFINITY) {
@@ -32,30 +37,40 @@ function normalizeAcceptToken(token: string) {
 }
 
 export function sanitizeUploadAccept(value: unknown) {
-  const raw = String(value || '')
+  const raw = String(value || '').trim()
+  if (!raw) return ''
   const tokens = raw
     .split(',')
     .map(normalizeAcceptToken)
     .filter(Boolean)
 
   const unique = Array.from(new Set(tokens))
-  return unique.join(',') || DEFAULT_UPLOAD_ACCEPT
+  return unique.join(',')
 }
 
 export function normalizeUploadQuestionConfig(question: { upload?: UploadQuestionConfig; validation?: Record<string, unknown> } | null | undefined): NormalizedUploadQuestionConfig {
   const upload = question?.upload && typeof question.upload === 'object' ? question.upload : {}
   const legacyValidation = question?.validation && typeof question.validation === 'object' ? question.validation : {}
 
+  const rawAccept = upload.accept ?? legacyValidation.accept
+  const accept = (rawAccept !== undefined && rawAccept !== null && rawAccept !== '') ? sanitizeUploadAccept(rawAccept) : ''
+
   return {
     maxFiles: toPositiveInt(upload.maxFiles ?? legacyValidation.maxFiles, DEFAULT_UPLOAD_MAX_FILES, MAX_UPLOAD_FILES),
     maxSizeMb: toPositiveNumber(upload.maxSizeMb ?? legacyValidation.maxSizeMb ?? legacyValidation.maxSize, DEFAULT_UPLOAD_MAX_SIZE_MB, DEFAULT_UPLOAD_MAX_SIZE_MB),
-    accept: sanitizeUploadAccept(upload.accept ?? legacyValidation.accept)
+    accept,
+    compressSize: upload.compressSize === true,
+    compressDimensions: upload.compressDimensions === true,
+    maxWidth: toPositiveInt(upload.maxWidth, 0, 10000),
+    maxHeight: toPositiveInt(upload.maxHeight, 0, 10000),
+    watermark: typeof upload.watermark === 'string' ? upload.watermark : ''
   }
 }
 
 export function buildUploadQuestionHelpText(question: { upload?: UploadQuestionConfig; validation?: Record<string, unknown> } | null | undefined) {
   const config = normalizeUploadQuestionConfig(question)
-  return `支持 ${config.accept}，单文件不超过 ${config.maxSizeMb}MB，最多上传 ${config.maxFiles} 个文件`
+  const acceptPart = config.accept ? `支持 ${config.accept}` : '不限文件类型'
+  return `${acceptPart}，单文件不超过 ${config.maxSizeMb}MB，最多上传 ${config.maxFiles} 个文件`
 }
 
 function getFileExtension(filename: string) {
@@ -88,7 +103,7 @@ export function validateSelectedUploadFiles(
   }
 
   const maxBytes = config.maxSizeMb * 1024 * 1024
-  const acceptTokens = config.accept.split(',').map(token => token.trim()).filter(Boolean)
+  const acceptTokens = config.accept ? config.accept.split(',').map(token => token.trim()).filter(Boolean) : []
 
   for (const file of files) {
     if (Number(file.size || 0) > maxBytes) {

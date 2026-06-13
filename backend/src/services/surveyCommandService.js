@@ -3,9 +3,10 @@ import surveyAggregateRepository from '../repositories/surveyAggregateRepository
 import surveyRepository from '../repositories/surveyRepository.js'
 import surveyResultsSnapshotRepository from '../repositories/surveyResultsSnapshotRepository.js'
 import { normalizeSurveyQuestions, validateSurveyQuestions } from '../utils/questionSchema.js'
-import { removeUploadedFile } from '../utils/uploadStorage.js'
+import { removeUploadedFile, cleanupStoredFiles } from '../utils/uploadStorage.js'
 import { createAuditMessage, recordAudit } from './activity.js'
 import { getSurveyForManagement, resolveRequestedSurveyCreatorId } from './surveyAccessService.js'
+import { createHttpError } from '../http/errors.js'
 import {
   normalizeSurveyFolderId,
   sanitizeWritableSurveySettings,
@@ -15,22 +16,6 @@ import {
 } from '../../../shared/survey.contract.js'
 
 export { uploadSurveyFile, submitSurveyResponse } from './surveyUploadService.js'
-
-function createHttpError(status, code, message) {
-  return Object.assign(new Error(message), { status, code })
-}
-
-function cleanupStoredFiles(files = []) {
-  if (!Array.isArray(files) || files.length === 0) return
-
-  for (const file of files) {
-    try {
-      removeUploadedFile(file?.url || file)
-    } catch (error) {
-      console.error('Failed to remove uploaded file:', error.message)
-    }
-  }
-}
 
 function getSurveyEndTimeMeta(survey) {
   const raw = survey?.settings?.endTime

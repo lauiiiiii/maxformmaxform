@@ -71,7 +71,81 @@ test('POST /api/surveys/:id/uploads allows public uploads for published surveys'
   }
 })
 
-test('POST /api/surveys/:id/uploads rejects files beyond the upload question limit', async () => {
+test('POST /api/surveys/:id/uploads allows unrestricted question uploads beyond the managed file whitelist', async () => {
+  let createdPayload = null
+  let uploadedFilePath = null
+
+  Survey.findByIdentifier = async () => ({
+    id: 33,
+    creator_id: 1,
+    title: 'Unrestricted Upload Survey',
+    status: 'published',
+    settings: {},
+    questions: [{ type: 'upload', title: 'Attachment', required: false, order: 1, upload: { maxFiles: 1, maxSizeMb: 10, accept: '' } }]
+  })
+  FileModel.create = async payload => {
+    createdPayload = payload
+    return { id: 502, ...payload }
+  }
+
+  const form = new FormData()
+  form.append('file', new Blob(['plain text upload'], { type: 'text/plain' }), 'note.txt')
+
+  try {
+    const { response, json } = await requestPublic('/surveys/33/uploads', {
+      method: 'POST',
+      body: form
+    })
+
+    assert.equal(response.status, 200)
+    assert.equal(json.success, true)
+    assert.equal(json.data.id, 502)
+    assert.equal(createdPayload.name, 'note.txt')
+    assert.equal(createdPayload.type, 'text/plain')
+    uploadedFilePath = `${UPLOAD_DIR}/${createdPayload.url.split('/').pop()}`
+  } finally {
+    if (uploadedFilePath && fs.existsSync(uploadedFilePath)) fs.unlinkSync(uploadedFilePath)
+  }
+})
+
+test('POST /api/surveys/:id/uploads preserves non-ascii upload filenames', async () => {
+  const filename = '\u4e2d\u6587\u6587\u4ef6.xlsx'
+  let createdPayload = null
+  let uploadedFilePath = null
+
+  Survey.findByIdentifier = async () => ({
+    id: 35,
+    creator_id: 1,
+    title: 'Filename Survey',
+    status: 'published',
+    settings: {},
+    questions: [{ type: 'upload', title: 'Attachment', required: false, order: 1, upload: { maxFiles: 1, maxSizeMb: 10, accept: '' } }]
+  })
+  FileModel.create = async payload => {
+    createdPayload = payload
+    return { id: 503, ...payload }
+  }
+
+  const form = new FormData()
+  form.append('file', new Blob(['excel upload'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename)
+
+  try {
+    const { response, json } = await requestPublic('/surveys/35/uploads', {
+      method: 'POST',
+      body: form
+    })
+
+    assert.equal(response.status, 200)
+    assert.equal(json.success, true)
+    assert.equal(json.data.name, filename)
+    assert.equal(createdPayload.name, filename)
+    uploadedFilePath = `${UPLOAD_DIR}/${createdPayload.url.split('/').pop()}`
+  } finally {
+    if (uploadedFilePath && fs.existsSync(uploadedFilePath)) fs.unlinkSync(uploadedFilePath)
+  }
+})
+
+test('POST /api/surveys/:id/uploads replaces stale pending file for single-file upload questions', async () => {
   Survey.findByIdentifier = async () => ({
     id: 32,
     creator_id: 1,
@@ -87,12 +161,20 @@ test('POST /api/surveys/:id/uploads rejects files beyond the upload question lim
     }]
   })
 
-  let createCalled = false
-  FileModel.create = async () => {
-    createCalled = true
-    return { id: 999 }
-  }
+  let deletedIds = null
+  let createdPayload = null
   FileModel.countPendingBySurveyQuestionSession = async () => 1
+  FileModel.listPendingBySurveyQuestionSession = async () => ([
+    { id: 701, name: 'old.pdf', url: '/uploads/missing-old.pdf' }
+  ])
+  FileModel.deleteByIds = async ids => {
+    deletedIds = ids
+    return ids.length
+  }
+  FileModel.create = async payload => {
+    createdPayload = payload
+    return { id: 999, ...payload }
+  }
 
   const form = new FormData()
   form.append('questionId', '1')
@@ -100,6 +182,45 @@ test('POST /api/surveys/:id/uploads rejects files beyond the upload question lim
   form.append('file', new Blob(['hello again'], { type: 'application/pdf' }), 'limit.pdf')
 
   const { response, json } = await requestPublic('/surveys/32/uploads', {
+    method: 'POST',
+    body: form
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(json.success, true)
+  assert.deepEqual(deletedIds, [701])
+  assert.equal(createdPayload.name, 'limit.pdf')
+})
+
+test('POST /api/surveys/:id/uploads rejects files beyond multi-file upload question limits', async () => {
+  Survey.findByIdentifier = async () => ({
+    id: 34,
+    creator_id: 1,
+    title: 'Limited Multi Upload Survey',
+    status: 'published',
+    settings: {},
+    questions: [{
+      type: 'upload',
+      title: 'Attachment',
+      required: false,
+      order: 1,
+      upload: { maxFiles: 2, maxSizeMb: 10, accept: '.pdf' }
+    }]
+  })
+
+  let createCalled = false
+  FileModel.countPendingBySurveyQuestionSession = async () => 2
+  FileModel.create = async () => {
+    createCalled = true
+    return { id: 1000 }
+  }
+
+  const form = new FormData()
+  form.append('questionId', '1')
+  form.append('submissionToken', 'session-34')
+  form.append('file', new Blob(['hello again'], { type: 'application/pdf' }), 'limit.pdf')
+
+  const { response, json } = await requestPublic('/surveys/34/uploads', {
     method: 'POST',
     body: form
   })
@@ -202,6 +323,57 @@ test('POST /api/surveys/:id/responses accepts matrix multiple and dropdown answe
     { questionId: 1, questionType: 'matrix', value: { 1: ['1', '2'], 2: ['3'] } },
     { questionId: 2, questionType: 'matrix', value: { 1: '2' } }
   ])
+})
+
+test('POST /api/surveys/:id/responses enforces matrix multiple option limits', async () => {
+  Survey.findByIdentifier = async () => ({
+    id: 46,
+    creator_id: 1,
+    title: 'Matrix Limit Survey',
+    status: 'published',
+    settings: {},
+    questions: [
+      {
+        type: 'matrix',
+        uiType: 21,
+        title: 'Matrix Multiple Limit',
+        required: true,
+        order: 1,
+        options: [{ label: 'A', value: '1' }, { label: 'B', value: '2' }, { label: 'C', value: '3' }],
+        matrix: {
+          selectionType: 'multiple',
+          optionLimit: { enabled: true, min: 2, max: 2 },
+          rows: [{ label: 'Skill 1', value: '1' }]
+        }
+      }
+    ]
+  })
+  Answer.countByIp = async () => 0
+  Answer.create = async payload => ({ id: 602, ...payload })
+  Survey.incrementResponseCount = async () => 1
+  Message.create = async () => ({ id: 1 })
+
+  const tooFew = await requestPublic('/surveys/46/responses', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      answers: [{ questionId: 1, value: { 1: ['1'] } }]
+    })
+  })
+  assert.equal(tooFew.response.status, 400)
+  assert.equal(tooFew.json.success, false)
+  assert.match(tooFew.json.error.message, /at least 2 options/i)
+
+  const tooMany = await requestPublic('/surveys/46/responses', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      answers: [{ questionId: 1, value: { 1: ['1', '2', '3'] } }]
+    })
+  })
+  assert.equal(tooMany.response.status, 400)
+  assert.equal(tooMany.json.success, false)
+  assert.match(tooMany.json.error.message, /at most 2 options/i)
 })
 
 test('POST /api/surveys/:id/responses accepts ratio answers totaling 100', async () => {

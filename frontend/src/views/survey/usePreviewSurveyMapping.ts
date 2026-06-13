@@ -40,6 +40,19 @@ export function usePreviewSurveyMapping(surveyForm: SurveyPreviewFormLike) {
               : []
           }
         : undefined,
+      multiFill: (q as any).multiFill
+        ? {
+            items: Array.isArray((q as any).multiFill.items)
+              ? (q as any).multiFill.items.map((item: any, index: number) => ({
+                  label: typeof item === 'string' ? item : String(item?.label ?? item?.text ?? `填空${index + 1}`),
+                  value: String(index + 1),
+                  order: index + 1,
+                  placeholder: '',
+                  required: true
+                }))
+              : []
+          }
+        : undefined,
       logic: (q as any).logic || null,
       jumpLogic: (q as any).jumpLogic || null,
       optionGroups: (q as any).optionGroups || [],

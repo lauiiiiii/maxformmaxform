@@ -1,5 +1,6 @@
 import type {
   MatrixQuestionConfigDTO,
+  MultiFillQuestionConfigDTO,
   QuestionDTO,
   QuestionOptionDTO,
   SurveyDTO,
@@ -14,6 +15,8 @@ export type QuestionOption = QuestionOptionDTO
 export type UploadQuestionConfig = UploadQuestionConfigDTO
 
 export type MatrixQuestionConfig = MatrixQuestionConfigDTO
+
+export type MultiFillQuestionConfig = MultiFillQuestionConfigDTO
 
 export type LegacyQuestionType = number
 

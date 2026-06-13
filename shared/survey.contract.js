@@ -50,6 +50,7 @@ export const QUESTION_DTO_WRITABLE_FIELDS = Object.freeze([
   'validation',
   'upload',
   'matrix',
+  'multiFill',
   'logic',
   'examConfig',
   'jumpLogic',
@@ -96,12 +97,24 @@ export const QUESTION_VALIDATION_WRITABLE_FIELDS = Object.freeze([
 export const QUESTION_UPLOAD_CONFIG_WRITABLE_FIELDS = Object.freeze([
   'maxFiles',
   'maxSizeMb',
-  'accept'
+  'accept',
+  'compressSize',
+  'compressDimensions',
+  'maxWidth',
+  'maxHeight',
+  'watermark'
 ])
 
 export const QUESTION_MATRIX_WRITABLE_FIELDS = Object.freeze([
   'rows',
-  'selectionType'
+  'selectionType',
+  'rowTitleWidth',
+  'rightRowTitle',
+  'rowTitleRandom',
+  'verticalSelect',
+  'singleQuestionAnswer',
+  'mobileLayout',
+  'optionLimit'
 ])
 
 export const QUESTION_MATRIX_ROW_WRITABLE_FIELDS = Object.freeze([
@@ -109,6 +122,19 @@ export const QUESTION_MATRIX_ROW_WRITABLE_FIELDS = Object.freeze([
   'value',
   'order',
   'text'
+])
+
+export const QUESTION_MULTI_FILL_CONFIG_WRITABLE_FIELDS = Object.freeze([
+  'items'
+])
+
+export const QUESTION_MULTI_FILL_ITEM_WRITABLE_FIELDS = Object.freeze([
+  'label',
+  'value',
+  'order',
+  'text',
+  'placeholder',
+  'required'
 ])
 
 export const QUESTION_LOGIC_CONDITION_WRITABLE_FIELDS = Object.freeze([
@@ -236,6 +262,20 @@ function sanitizeMatrixRows(rows) {
   return normalized
 }
 
+function sanitizeMultiFillItems(items) {
+  if (!Array.isArray(items)) return undefined
+
+  const normalized = items
+    .map(item => {
+      if (!isPlainRecord(item)) return cloneJsonValue(item)
+      const picked = pickWritableFields(item, QUESTION_MULTI_FILL_ITEM_WRITABLE_FIELDS)
+      return picked ? cloneJsonValue(picked) : undefined
+    })
+    .filter(item => item !== undefined)
+
+  return normalized
+}
+
 function sanitizeValidation(validation) {
   const picked = pickWritableFields(validation, QUESTION_VALIDATION_WRITABLE_FIELDS)
   return picked ? cloneJsonValue(picked) : undefined
@@ -252,6 +292,15 @@ function sanitizeMatrixConfig(matrix) {
 
   const sanitized = { ...picked }
   if (picked.rows !== undefined) sanitized.rows = sanitizeMatrixRows(picked.rows)
+  return sanitized
+}
+
+function sanitizeMultiFillConfig(multiFill) {
+  const picked = pickWritableFields(multiFill, QUESTION_MULTI_FILL_CONFIG_WRITABLE_FIELDS)
+  if (!picked) return undefined
+
+  const sanitized = { ...picked }
+  if (picked.items !== undefined) sanitized.items = sanitizeMultiFillItems(picked.items)
   return sanitized
 }
 
@@ -315,6 +364,7 @@ export function sanitizeWritableQuestionDto(question) {
   if (picked.validation !== undefined) sanitized.validation = sanitizeValidation(picked.validation)
   if (picked.upload !== undefined) sanitized.upload = sanitizeUploadConfig(picked.upload)
   if (picked.matrix !== undefined) sanitized.matrix = sanitizeMatrixConfig(picked.matrix)
+  if (picked.multiFill !== undefined) sanitized.multiFill = sanitizeMultiFillConfig(picked.multiFill)
   if (picked.logic !== undefined) sanitized.logic = sanitizeQuestionLogic(picked.logic)
   if (picked.examConfig !== undefined) sanitized.examConfig = sanitizeExamConfig(picked.examConfig)
   if (picked.jumpLogic !== undefined) sanitized.jumpLogic = sanitizeJumpLogic(picked.jumpLogic)

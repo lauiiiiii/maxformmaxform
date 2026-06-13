@@ -8,7 +8,7 @@ import {
   validateSubmissionAnswers,
   validateUploadFilesAgainstQuestion
 } from '../utils/questionSchema.js'
-import { buildUploadedFileUrl, removeUploadedFile } from '../utils/uploadStorage.js'
+import { buildUploadedFileUrl, normalizeUploadedFileName, removeUploadedFile } from '../utils/uploadStorage.js'
 import config from '../config/index.js'
 import { throwSurveyUploadPolicyError } from '../http/surveyUploadErrors.js'
 import {
@@ -154,10 +154,17 @@ export async function uploadSurveyFile({ survey, file, requestedQuestionId, subm
 
   if (uploadQuestion) {
     const numericQuestionId = Number(requestedQuestionId)
-    const currentCount = await fileRepository.countPendingBySurveyQuestionSession(survey.id, numericQuestionId, normalizedSubmissionToken)
+    let currentCount = await fileRepository.countPendingBySurveyQuestionSession(survey.id, numericQuestionId, normalizedSubmissionToken)
     const uploadConfig = normalizeUploadQuestionConfig(uploadQuestion)
     const uploadError = validateUploadFilesAgainstQuestion(uploadQuestion, [file], { enforceCount: false })
-    const exceedsCount = currentCount + 1 > uploadConfig.maxFiles
+    let exceedsCount = currentCount + 1 > uploadConfig.maxFiles
+
+    if (!uploadError && exceedsCount && uploadConfig.maxFiles === 1) {
+      const stalePendingFiles = await fileRepository.listPendingBySurveyQuestionSession(survey.id, numericQuestionId, normalizedSubmissionToken)
+      await cleanupPendingUploadRecords(stalePendingFiles)
+      currentCount = 0
+      exceedsCount = false
+    }
 
     const validationPolicy = getUploadValidationPolicy({
       questionId: numericQuestionId,
@@ -172,7 +179,7 @@ export async function uploadSurveyFile({ survey, file, requestedQuestionId, subm
   }
 
   const saved = await fileRepository.create({
-    name: file.originalname || file.filename,
+    name: normalizeUploadedFileName(file.originalname || file.filename) || file.filename,
     url: buildUploadedFileUrl(file),
     size: file.size,
     type: file.mimetype,

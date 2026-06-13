@@ -1,10 +1,6 @@
-import knex from '../db/knex.js'
+import getDb from '../db/getDb.js'
 
 const TABLE = 'positions'
-
-function getDb(options = {}) {
-  return options.db || knex
-}
 
 const Position = {
   async findById(id, options = {}) {

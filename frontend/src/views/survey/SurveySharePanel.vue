@@ -72,7 +72,7 @@
   <section class="share-panel">
       <div class="link-row" :title="shareLink ? '点击复制或使用右侧按钮' : '发布问卷后才能生成分享链接'">
         <span class="link-icon">🔗</span>
-        <input class="share-input" :value="shareLink" :placeholder="shareLink ? '' : '发布问卷后生成 /s/9位码 分享链接'" readonly @click="selectInput" @focus="selectInput" />
+        <input class="share-input" :value="shareLink" :placeholder="shareLink ? '' : '发布问卷后生成 /s/分享码 链接'" readonly @click="selectInput" @focus="selectInput" />
         <button class="btn btn-copy" :disabled="!hasLink" @click="copyLink">
           <span v-if="copiedLink">✅ 已复制</span>
           <span v-else>复制</span>
@@ -164,8 +164,8 @@ const activeTopTab = ref<string>('share')
 const currentTabLabel = computed(() => topTabs.value.find(t=>t.id===activeTopTab.value)?.label || '')
 const hasLink = computed(() => !!props.shareLink)
 const shareCode = computed(() => {
-  const m = (props.shareLink || '').match(/\/s\/(\d{9})/)
-  return m ? m[1] : ''
+  const m = (props.shareLink || '').match(/\/s\/([^/?#]+)/)
+  return m ? decodeURIComponent(m[1]) : ''
 })
 // 复制状态反馈
 const copiedLink = ref(false)

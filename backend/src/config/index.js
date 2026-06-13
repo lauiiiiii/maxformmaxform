@@ -5,7 +5,7 @@ const config = {
   frontendUrl: process.env.FRONTEND_URL || 'http://127.0.0.1:63000',
 
   jwt: {
-    secret: process.env.JWT_SECRET || 'dev-secret',
+    secret: process.env.JWT_SECRET,
     expiresIn: process.env.JWT_EXPIRES_IN || '7d'
   },
 
@@ -26,8 +26,15 @@ const config = {
   }
 }
 
-if (config.jwt.secret === 'dev-secret' && process.env.NODE_ENV === 'production') {
-  console.error('FATAL: JWT_SECRET must be set in production')
+if (!config.jwt.secret) {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('FATAL: JWT_SECRET environment variable is required in production')
+    process.exit(1)
+  }
+  config.jwt.secret = 'dev-secret-change-in-production'
+  console.warn('WARNING: Using default JWT_SECRET for development. Set a strong secret in .env for production.')
+} else if (config.jwt.secret.length < 32 && process.env.NODE_ENV === 'production') {
+  console.error('FATAL: JWT_SECRET must be at least 32 characters in production')
   process.exit(1)
 }
 

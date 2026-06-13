@@ -1,11 +1,7 @@
-import knex from '../db/knex.js'
+import getDb from '../db/getDb.js'
 
 const TABLE = 'folders'
 const SURVEY_TABLE = 'surveys'
-
-function getDb(options = {}) {
-  return options.db || knex
-}
 
 function toDto(row) {
   if (!row) return null

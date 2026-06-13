@@ -1,29 +1,15 @@
-import knex from '../db/knex.js'
+import { parseJsonField } from '../utils/jsonField.js'
+import getDb from '../db/getDb.js'
 
 const TABLE = 'system_configs'
 
-function getDb(options = {}) {
-  return options.db || knex
-}
-
-function parseJsonField(value, fallback = null) {
-  if (value == null) return fallback
-  if (typeof value === 'string') {
-    try {
-      return JSON.parse(value)
-    } catch {
-      return fallback
-    }
-  }
-  return value
-}
-
 function toDto(row) {
   if (!row) return null
+  parseJsonField(row, 'config_value')
   return {
     ...row,
     configKey: row.config_key,
-    configValue: parseJsonField(row.config_value, null),
+    configValue: row.config_value,
     updatedBy: row.updated_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at

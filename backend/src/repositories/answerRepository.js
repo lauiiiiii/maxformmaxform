@@ -7,8 +7,7 @@ const answerRepository = {
 
   async findByIds(ids = [], options = {}) {
     if (!Array.isArray(ids) || ids.length === 0) return []
-    const rows = await Promise.all(ids.map(id => AnswerModel.findById(id, options)))
-    return rows.filter(Boolean)
+    return AnswerModel.findByIds(ids, options)
   },
 
   async list(payload = {}, options = {}) {

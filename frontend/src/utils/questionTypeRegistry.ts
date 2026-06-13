@@ -24,6 +24,7 @@ import {
 
 export type ServerQuestionType =
   | 'input'
+  | 'multi_input'
   | 'textarea'
   | 'radio'
   | 'checkbox'
@@ -37,7 +38,7 @@ export type ServerQuestionType =
   | 'ratio'
 
 export type QuestionAnalyticsKind = 'choice' | 'text' | 'metric' | 'files' | 'rating' | 'matrix' | 'ratio' | 'other'
-export type LegacyQuestionConfigPanel = 'default' | 'standalone' | 'matrix'
+export type LegacyQuestionConfigPanel = 'default' | 'standalone' | 'matrix' | 'multi_fill'
 
 type QuestionWithUiType = Pick<Question, 'type'> & { uiType?: number | string }
 

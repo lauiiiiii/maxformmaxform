@@ -98,6 +98,7 @@ const originalFileMethods = {
   listBySurveyIds: FileModel.listBySurveyIds,
   listAnswerFilesBySurveyId: FileModel.listAnswerFilesBySurveyId,
   countPendingBySurveyQuestionSession: FileModel.countPendingBySurveyQuestionSession,
+  listPendingBySurveyQuestionSession: FileModel.listPendingBySurveyQuestionSession,
   attachToAnswer: FileModel.attachToAnswer,
   listExpiredPending: FileModel.listExpiredPending,
   listPendingBySubmission: FileModel.listPendingBySubmission,
@@ -198,6 +199,7 @@ const originalFileRepositoryMethods = {
   listBySurveyIds: fileRepository.listBySurveyIds,
   listAnswerFilesBySurveyId: fileRepository.listAnswerFilesBySurveyId,
   countPendingBySurveyQuestionSession: fileRepository.countPendingBySurveyQuestionSession,
+  listPendingBySurveyQuestionSession: fileRepository.listPendingBySurveyQuestionSession,
   attachToAnswer: fileRepository.attachToAnswer,
   listExpiredPending: fileRepository.listExpiredPending,
   listPendingBySubmission: fileRepository.listPendingBySubmission,
@@ -222,6 +224,7 @@ export function applyDefaultFileStubs() {
   FileModel.listByAnswerIds = async () => []
   FileModel.listPendingBySubmission = async () => []
   FileModel.countPendingBySurveyQuestionSession = async () => 0
+  FileModel.listPendingBySurveyQuestionSession = async () => []
   FileModel.listBySurveyIds = async () => []
   Answer.getAggregateState = async () => ({
     answerCount: 0,
@@ -304,6 +307,7 @@ export function resetApiRouteModelState() {
   FileModel.listBySurveyIds = originalFileMethods.listBySurveyIds
   FileModel.listAnswerFilesBySurveyId = originalFileMethods.listAnswerFilesBySurveyId
   FileModel.countPendingBySurveyQuestionSession = originalFileMethods.countPendingBySurveyQuestionSession
+  FileModel.listPendingBySurveyQuestionSession = originalFileMethods.listPendingBySurveyQuestionSession
   FileModel.attachToAnswer = originalFileMethods.attachToAnswer
   FileModel.listExpiredPending = originalFileMethods.listExpiredPending
   FileModel.listPendingBySubmission = originalFileMethods.listPendingBySubmission
@@ -393,6 +397,7 @@ export function resetApiRouteModelState() {
   fileRepository.listBySurveyIds = originalFileRepositoryMethods.listBySurveyIds
   fileRepository.listAnswerFilesBySurveyId = originalFileRepositoryMethods.listAnswerFilesBySurveyId
   fileRepository.countPendingBySurveyQuestionSession = originalFileRepositoryMethods.countPendingBySurveyQuestionSession
+  fileRepository.listPendingBySurveyQuestionSession = originalFileRepositoryMethods.listPendingBySurveyQuestionSession
   fileRepository.attachToAnswer = originalFileRepositoryMethods.attachToAnswer
   fileRepository.listExpiredPending = originalFileRepositoryMethods.listExpiredPending
   fileRepository.listPendingBySubmission = originalFileRepositoryMethods.listPendingBySubmission

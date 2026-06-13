@@ -3,21 +3,9 @@ import { getAnswerBatchDeletePolicy } from '../policies/answerPolicy.js'
 import answerRepository from '../repositories/answerRepository.js'
 import surveyAggregateRepository from '../repositories/surveyAggregateRepository.js'
 import { normalizeAnswerIds } from '../utils/answerPayload.js'
-import { removeUploadedFile } from '../utils/uploadStorage.js'
+import { removeUploadedFile, cleanupStoredFiles } from '../utils/uploadStorage.js'
 import { getManagedSurveyForAnswerRequest } from './answerQueryService.js'
 import { createAnswerBatchDeleteResult } from '../../../shared/answer.contract.js'
-
-function cleanupStoredFiles(files = []) {
-  if (!Array.isArray(files) || files.length === 0) return
-
-  for (const file of files) {
-    try {
-      removeUploadedFile(file?.url || file)
-    } catch (error) {
-      console.error('Failed to remove uploaded file:', error.message)
-    }
-  }
-}
 
 export async function deleteAnswersBatch({ actor, ids = [] }) {
   ids = normalizeAnswerIds(ids)

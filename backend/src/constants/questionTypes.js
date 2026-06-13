@@ -5,6 +5,7 @@ import {
 
 export const QuestionType = {
   FillBlank: mapLegacyTypeToServer(1),
+  MultiFillBlank: mapLegacyTypeToServer(9),
   ShortAnswer: mapLegacyTypeToServer(2),
   SingleChoice: mapLegacyTypeToServer(3),
   MultipleChoice: mapLegacyTypeToServer(4),

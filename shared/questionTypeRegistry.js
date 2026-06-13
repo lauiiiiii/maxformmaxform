@@ -1,5 +1,6 @@
 const SERVER_QUESTION_TYPE_DEFINITIONS = [
   { type: 'input', label: '填空题', hasOptions: false, analyticsKind: 'text', submissionKind: 'text' },
+  { type: 'multi_input', label: '多项填空题', hasOptions: false, analyticsKind: 'text', submissionKind: 'object_text' },
   { type: 'textarea', label: '简答题', hasOptions: false, analyticsKind: 'text', submissionKind: 'text' },
   { type: 'radio', label: '单选题', hasOptions: true, analyticsKind: 'choice', submissionKind: 'single_option' },
   { type: 'checkbox', label: '多选题', hasOptions: true, analyticsKind: 'choice', submissionKind: 'multi_option' },
@@ -27,6 +28,16 @@ const LEGACY_QUESTION_TYPE_DEFINITIONS = [
     defaultLegacy: true,
     configPanel: 'standalone',
     draft: { validation: { min: 0, max: 100, step: 1 } }
+  },
+  {
+    legacyType: 9,
+    label: '多项填空',
+    serverType: 'multi_input',
+    implemented: true,
+    defaultLegacy: true,
+    configPanel: 'multi_fill',
+    renderType: 'multi_fill',
+    draft: { multiFill: { items: ['姓名', '部门', '员工编号'] } }
   },
   { legacyType: 11, label: '排序题', serverType: 'ranking', implemented: true, defaultLegacy: true, hasOptions: true, defaultOptions: ['项目1', '项目2', '项目3'] },
   {
@@ -60,6 +71,16 @@ const LEGACY_QUESTION_TYPE_DEFINITIONS = [
     defaultOptions: ['非常满意', '满意', '一般', '不满意', '非常不满意'],
     configPanel: 'matrix',
     draft: { matrix: { rows: ['服务态度', '响应速度', '专业程度'], selectionType: 'multiple' } }
+  },
+  {
+    legacyType: 22,
+    label: '矩阵量表',
+    serverType: 'matrix',
+    implemented: true,
+    hasOptions: true,
+    defaultOptions: ['很不满意', '不满意', '一般', '满意', '很满意'],
+    configPanel: 'matrix',
+    draft: { matrix: { rows: ['外观', '功能'], selectionType: 'single' } }
   },
   {
     legacyType: 24,

@@ -69,6 +69,36 @@ function normalizeMatrixRows(rows = []) {
   })
 }
 
+function normalizeMultiFillItems(items = []) {
+  return items
+    .map((item, index) => {
+      if (item && typeof item === 'object') {
+        return {
+          ...item,
+          label: String(item.label ?? item.text ?? `填空${index + 1}`),
+          value: String(item.value ?? index + 1),
+          order: Number(item.order || index + 1),
+          placeholder: item.placeholder == null ? '' : String(item.placeholder),
+          required: item.required === undefined ? true : item.required !== false
+        }
+      }
+
+      return {
+        label: String(item ?? `填空${index + 1}`),
+        value: String(index + 1),
+        order: index + 1,
+        placeholder: '',
+        required: true
+      }
+    })
+    .filter(item => item.label.trim())
+}
+
+function getMultiFillItems(question) {
+  const items = Array.isArray(question?.multiFill?.items) ? question.multiFill.items : []
+  return normalizeMultiFillItems(items)
+}
+
 function toRoundedRatioValue(value) {
   const numeric = Number(value)
   if (!Number.isFinite(numeric)) return null
@@ -359,23 +389,28 @@ function validateQuestionOptionMetadata(question, questionIndex, questions) {
 }
 
 export function sanitizeUploadAccept(value) {
-  const tokens = String(value || '')
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  const tokens = raw
     .split(',')
     .map(normalizeAcceptToken)
     .filter(Boolean)
 
   const unique = Array.from(new Set(tokens))
-  return unique.join(',') || DEFAULT_UPLOAD_ACCEPT
+  return unique.join(',')
 }
 
 export function normalizeUploadQuestionConfig(question) {
   const upload = question?.upload && typeof question.upload === 'object' ? question.upload : {}
   const validation = question?.validation && typeof question.validation === 'object' ? question.validation : {}
 
+  const rawAccept = upload.accept ?? validation.accept
+  const accept = (rawAccept !== undefined && rawAccept !== null && rawAccept !== '') ? sanitizeUploadAccept(rawAccept) : ''
+
   return {
     maxFiles: toPositiveInt(upload.maxFiles ?? validation.maxFiles, DEFAULT_UPLOAD_MAX_FILES, MAX_UPLOAD_FILES),
     maxSizeMb: toPositiveNumber(upload.maxSizeMb ?? validation.maxSizeMb ?? validation.maxSize, DEFAULT_UPLOAD_MAX_SIZE_MB, DEFAULT_UPLOAD_MAX_SIZE_MB),
-    accept: sanitizeUploadAccept(upload.accept ?? validation.accept)
+    accept
   }
 }
 
@@ -407,7 +442,7 @@ export function validateUploadFilesAgainstQuestion(question, files, options = {}
   }
 
   const maxBytes = config.maxSizeMb * 1024 * 1024
-  const acceptTokens = config.accept.split(',').map(token => token.trim()).filter(Boolean)
+  const acceptTokens = config.accept ? config.accept.split(',').map(token => token.trim()).filter(Boolean) : []
 
   for (const file of list) {
     if (Number(file?.size || 0) > maxBytes) {
@@ -455,6 +490,12 @@ export function normalizeSurveyQuestions(questions) {
       normalized.upload = normalizeUploadQuestionConfig(question)
     }
 
+    if (normalizedType === 'multi_input') {
+      normalized.multiFill = {
+        items: getMultiFillItems(question)
+      }
+    }
+
     return normalized
   })
 }
@@ -488,6 +529,13 @@ export function validateSurveyQuestions(questions) {
       }
       if (rows.length < 1) {
         return { normalizedQuestions, error: `Question ${index + 1} needs at least 1 row` }
+      }
+    }
+
+    if (question.type === 'multi_input') {
+      const items = getMultiFillItems(question)
+      if (items.length < 1) {
+        return { normalizedQuestions, error: `Question ${index + 1} needs at least 1 fill item` }
       }
     }
 
@@ -575,6 +623,12 @@ export function validateSubmissionAnswers(questions, answers) {
       const rowValues = new Set((question?.matrix?.rows || []).map(row => String(row.value)))
       const answerEntries = Object.entries(value)
       const isMultipleMatrix = question?.matrix?.selectionType === 'multiple'
+      const optionLimit = question?.matrix?.optionLimit && typeof question.matrix.optionLimit === 'object'
+        ? question.matrix.optionLimit
+        : {}
+      const hasMatrixOptionLimit = isMultipleMatrix && optionLimit.enabled === true
+      const matrixOptionMin = Math.max(0, Math.floor(Number(optionLimit.min || 0)))
+      const matrixOptionMax = Math.max(0, Math.floor(Number(optionLimit.max || 0)))
 
       for (const [rowKey, answerValue] of answerEntries) {
         if (!rowValues.has(String(rowKey))) {
@@ -589,6 +643,14 @@ export function validateSubmissionAnswers(questions, answers) {
           const invalid = answerValue.some(option => !optionValues.has(String(option)))
           if (invalid) {
             return { normalizedAnswers: [], error: `Question ${order} contains an invalid option` }
+          }
+          if (hasMatrixOptionLimit) {
+            if (matrixOptionMin > 0 && answerValue.length < matrixOptionMin) {
+              return { normalizedAnswers: [], error: `Question ${order} row ${rowKey} must select at least ${matrixOptionMin} options` }
+            }
+            if (matrixOptionMax > 0 && answerValue.length > matrixOptionMax) {
+              return { normalizedAnswers: [], error: `Question ${order} row ${rowKey} allows at most ${matrixOptionMax} options` }
+            }
           }
           continue
         }
@@ -627,16 +689,39 @@ export function validateSubmissionAnswers(questions, answers) {
       normalizedValue = Object.fromEntries(normalizedRatio.entries)
     }
 
+    if (submissionKind === 'object_text' && value != null) {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return { normalizedAnswers: [], error: `Question ${order} must be an object` }
+      }
+
+      const items = getMultiFillItems(question)
+      const itemValues = new Set(items.map(item => String(item.value)))
+      const entries = []
+      for (const [itemKey, rawValue] of Object.entries(value)) {
+        if (!itemValues.has(String(itemKey))) {
+          return { normalizedAnswers: [], error: `Question ${order} contains an invalid fill item` }
+        }
+        const text = String(rawValue ?? '').trim()
+        if (text) entries.push([String(itemKey), text])
+      }
+      normalizedValue = Object.fromEntries(entries)
+    }
+
     if (question.required) {
       const empty = question.type === 'matrix'
         ? (() => {
             const rows = Array.isArray(question?.matrix?.rows) ? question.matrix.rows : []
             const isMultipleMatrix = question?.matrix?.selectionType === 'multiple'
+            const optionLimit = question?.matrix?.optionLimit && typeof question.matrix.optionLimit === 'object' ? question.matrix.optionLimit : {}
+            const matrixOptionMin = optionLimit.enabled === true ? Math.max(1, Math.floor(Number(optionLimit.min || 1))) : 1
+            const matrixOptionMax = optionLimit.enabled === true ? Math.max(0, Math.floor(Number(optionLimit.max || 0))) : 0
             if (!value || typeof value !== 'object' || Array.isArray(value)) return true
             return rows.some(row => {
               const rowValue = value[String(row.value)]
               if (isMultipleMatrix) {
-                return !Array.isArray(rowValue) || rowValue.length === 0
+                return !Array.isArray(rowValue)
+                  || rowValue.length < matrixOptionMin
+                  || (matrixOptionMax > 0 && rowValue.length > matrixOptionMax)
               }
               return rowValue == null || String(rowValue).trim() === ''
             })
@@ -648,6 +733,12 @@ export function validateSubmissionAnswers(questions, answers) {
               if (normalizedRatio.entries.length === 0) return true
               const total = normalizedRatio.entries.reduce((sum, [, numeric]) => sum + numeric, 0)
               return Math.abs(total - 100) > 0.01
+            })()
+        : question.type === 'multi_input'
+          ? (() => {
+              const items = getMultiFillItems(question)
+              if (!value || typeof value !== 'object' || Array.isArray(value)) return true
+              return items.some(item => item.required !== false && String(value[String(item.value)] ?? '').trim() === '')
             })()
         : (Array.isArray(value) ? value.length === 0 : value == null || String(value).trim() === '')
       if (empty) {

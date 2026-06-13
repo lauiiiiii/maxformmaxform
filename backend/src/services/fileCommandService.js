@@ -1,7 +1,7 @@
 import { throwManagementError, throwManagementPolicyError } from '../http/managementErrors.js'
 import { getManageFilePolicy } from '../policies/filePolicy.js'
 import fileRepository from '../repositories/fileRepository.js'
-import { buildUploadedFileUrl, removeUploadedFile } from '../utils/uploadStorage.js'
+import { buildUploadedFileUrl, normalizeUploadedFileName, removeUploadedFile } from '../utils/uploadStorage.js'
 import { createFileDto, MANAGEMENT_ERROR_CODES } from '../../../shared/management.contract.js'
 
 function ensureUploadedFile(file) {
@@ -14,7 +14,7 @@ async function createManagedFileRecord({ actor, file }) {
 
   const url = buildUploadedFileUrl(file)
   const saved = await fileRepository.create({
-    name: file.originalname || file.filename,
+    name: normalizeUploadedFileName(file.originalname || file.filename) || file.filename,
     url,
     size: file.size,
     type: file.mimetype,
