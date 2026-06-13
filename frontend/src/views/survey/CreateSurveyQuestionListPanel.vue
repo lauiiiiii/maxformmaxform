@@ -781,7 +781,6 @@ import { computed } from 'vue'
 import type { CreateSurveyQuestionListPanelContract } from './createSurveyPageContracts'
 import { EditPen, CirclePlus, Remove, Document, Hide, DocumentAdd, ArrowUp, ArrowDown, DocumentCopy, Delete } from '@element-plus/icons-vue'
 import QuillFloatingEditor from '@/components/QuillFloatingEditor.vue'
-import './createSurveyPage.css'
 
 const props = defineProps<{
   context: CreateSurveyQuestionListPanelContract

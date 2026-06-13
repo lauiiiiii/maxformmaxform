@@ -571,7 +571,6 @@
 import type { CreateSurveyLogicSettingsContract } from './createSurveyPageContracts'
 import { QuestionFilled, EditPen, Remove } from '@element-plus/icons-vue'
 import QuillRichTextDialog from '@/components/QuillRichTextDialog.vue'
-import './createSurveyPage.css'
 
 const props = defineProps<{
   context: CreateSurveyLogicSettingsContract

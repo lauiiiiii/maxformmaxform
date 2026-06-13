@@ -384,7 +384,6 @@ import { useRouter } from 'vue-router'
 import { reactive, ref, onMounted, watchEffect, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
-import '../styles/design-tokens.css'
 const router = useRouter()
 const authStore = useAuthStore()
 const { isLoggedIn, user, username } = storeToRefs(authStore)

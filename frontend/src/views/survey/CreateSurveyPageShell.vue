@@ -106,7 +106,6 @@ import CreateSurveyQuestionConfigPanel from './CreateSurveyQuestionConfigPanel.v
 import CreateSurveyQuestionListPanel from './CreateSurveyQuestionListPanel.vue'
 import CreateSurveyLogicSettings from './CreateSurveyLogicSettings.vue'
 import CreateSurveyPublishPanel from './CreateSurveyPublishPanel.vue'
-import './createSurveyPage.css'
 
 const props = defineProps<{
   shell: CreateSurveyPageShellContract

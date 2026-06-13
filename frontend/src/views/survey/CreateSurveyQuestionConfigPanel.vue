@@ -422,7 +422,6 @@ import {
   Star,
   Tickets
 } from '@element-plus/icons-vue'
-import './createSurveyPage.css'
 
 const props = defineProps<{
   context: CreateSurveyQuestionConfigPanelContract

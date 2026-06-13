@@ -64,7 +64,6 @@
 <script setup lang="ts">
 import type { CreateSurveyPublishPanelContract } from './createSurveyPageContracts'
 import SurveySharePanel from './SurveySharePanel.vue'
-import './createSurveyPage.css'
 
 const props = defineProps<{
   mode: 'settings' | 'share'
